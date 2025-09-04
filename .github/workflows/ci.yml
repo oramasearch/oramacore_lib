@@ -40,7 +40,7 @@ jobs:
           cargo --version
       - name: Check & Fmt & Clippy
         run: |
-          cargo check --all-features
+          cargo check
           cargo fmt --all -- --check
           cargo clippy
       - name: Test

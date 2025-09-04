@@ -44,6 +44,5 @@ tempfile = { version = "3", optional = true }
 tempfile = { version = "3" }
 
 [features]
-simd = []
 no_thread = []
 generate_new_path = ["tempfile"]
