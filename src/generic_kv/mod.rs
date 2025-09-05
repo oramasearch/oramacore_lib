@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use ptrie::Trie;
+use oramacore_ptrie::Trie;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::sync::RwLock;
 use tracing::{instrument, trace};

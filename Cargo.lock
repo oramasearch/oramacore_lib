@@ -2427,9 +2427,9 @@ dependencies = [
  "num",
  "num-traits",
  "orama-js-pool",
+ "oramacore_ptrie",
  "ordered-float",
  "parking_lot",
- "ptrie",
  "rand 0.9.2",
  "rayon",
  "regex",
@@ -2444,6 +2444,15 @@ dependencies = [
  "tiktoken-rs",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "oramacore_ptrie"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1ba00b79c1f25425365a4e114db1dc7b11db3007ae57e144c0f1b346192a178"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -2637,14 +2646,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "ptrie"
-version = "0.7.1"
-source = "git+https://github.com/oramasearch/ptrie.git?branch=feat%2Fscan-postfix-keys#2febca31945ffe5f0f212f2cfc614cee3d1baaf9"
-dependencies = [
- "serde",
 ]
 
 [[package]]

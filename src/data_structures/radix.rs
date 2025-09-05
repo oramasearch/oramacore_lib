@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use anyhow::Result;
-use ptrie::Trie;
+use oramacore_ptrie::Trie;
 
 pub struct RadixIndex<Value> {
     pub inner: Trie<u8, Value>,

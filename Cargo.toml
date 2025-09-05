@@ -33,9 +33,7 @@ memmap = "0.7.0"
 ordered-float = "4"
 parking_lot = "0.12.3"
 serde-big-array = "0.5.1"
-ptrie = { git = "https://github.com/oramasearch/ptrie.git", branch = "feat/scan-postfix-keys", features = [
-    "serde",
-] }
+oramacore_ptrie = { version = "0.1.0", features = ["serde"] }
 debug_panic = "0.2.1"
 
 tempfile = { version = "3", optional = true }
