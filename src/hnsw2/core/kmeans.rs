@@ -291,8 +291,8 @@ pub fn general_kmeans<E: node::FloatElement, T: node::IdxType>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::distr::StandardUniform;
     use rand::Rng;
+    use rand::distr::StandardUniform;
 
     fn make_normal_distribution_clustering(
         clustering_n: usize,

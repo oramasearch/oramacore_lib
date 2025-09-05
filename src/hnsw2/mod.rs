@@ -7,8 +7,8 @@ use core::ann_index;
 use core::metrics;
 use core::neighbor::Neighbor;
 use core::node;
-use hnsw_params::HNSWParams;
 use fixedbitset::FixedBitSet;
+use hnsw_params::HNSWParams;
 use rand::prelude::*;
 #[cfg(not(feature = "no_thread"))]
 use rayon::prelude::*;
@@ -671,9 +671,7 @@ pub struct HNSWIndexDump<E: node::FloatElement, T: node::IdxType> {
     _delete_ids_tmp: Vec<usize>,
 }
 
-impl<E: node::FloatElement, T: node::IdxType> Serialize
-    for HNSWIndex<E, T>
-{
+impl<E: node::FloatElement, T: node::IdxType> Serialize for HNSWIndex<E, T> {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         let _id2neighbor_tmp = self
             ._id2neighbor
@@ -777,7 +775,7 @@ impl<'de, E: node::FloatElement + DeserializeOwned, T: node::IdxType + Deseriali
 
 #[cfg(test)]
 mod tests {
-    use super::{core::{ann_index::ANNIndex, metrics::Metric}};
+    use super::core::{ann_index::ANNIndex, metrics::Metric};
 
     use super::*;
     use rand::distr::Uniform;

@@ -14,7 +14,7 @@ use ordered_float::OrderedFloat;
 use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 use serde::{Deserialize, Serialize};
 
-use std::cmp::{max, Ordering, Reverse};
+use std::cmp::{Ordering, Reverse, max};
 use std::collections::BinaryHeap;
 use std::collections::HashSet;
 
@@ -1162,9 +1162,7 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp, clippy::approx_constant)]
     fn incremental_insert() {
-        let points = (0_isize..4)
-            .map(|i| Point(i, i, 0))
-            .collect::<Vec<_>>();
+        let points = (0_isize..4).map(|i| Point(i, i, 0)).collect::<Vec<_>>();
         let values = vec!["zero", "one", "two", "three"];
         let seed = ThreadRng::default().random::<u64>();
         let builder = Builder::default().seed(seed);
@@ -1205,9 +1203,7 @@ mod tests {
         // This has the same expected results as incremental_insert but builds
         // the whole map in one go. Only here for comparison.
         {
-            let points = (0_isize..5)
-                .map(|i| Point(i, i, 0))
-                .collect::<Vec<_>>();
+            let points = (0_isize..5).map(|i| Point(i, i, 0)).collect::<Vec<_>>();
             let values = vec!["zero", "one", "two", "three", "four"];
             let seed = ThreadRng::default().random::<u64>();
             let builder = Builder::default().seed(seed);

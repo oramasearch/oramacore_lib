@@ -3,7 +3,7 @@
 use std::{collections::HashSet, fmt::Debug, hash::Hash, path::PathBuf};
 
 use anyhow::{Context, Result};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tracing::error;
 
 use crate::fs::BufferedFile;
@@ -93,9 +93,9 @@ pub struct Page<Key, Value: Eq + Hash> {
 }
 
 impl<
-        Key: DeserializeOwned + Serialize + Clone + Debug,
-        Value: Eq + Hash + DeserializeOwned + Serialize + Clone + Debug,
-    > Page<Key, Value>
+    Key: DeserializeOwned + Serialize + Clone + Debug,
+    Value: Eq + Hash + DeserializeOwned + Serialize + Clone + Debug,
+> Page<Key, Value>
 {
     pub fn get_page_items(&self) -> Result<Vec<Item<Key, Value>>> {
         match &self.pointer {
@@ -180,9 +180,9 @@ impl<Key: Debug, Value: Eq + Hash + Debug> Debug for OrderedKeyIndex<Key, Value>
 
 const MAX_NUMBER_PER_PAGE: usize = 1000;
 impl<
-        Key: Ord + DeserializeOwned + Clone + Serialize + BoundedValue + Debug,
-        Value: Eq + Hash + Clone + DeserializeOwned + Serialize + Debug,
-    > OrderedKeyIndex<Key, Value>
+    Key: Ord + DeserializeOwned + Clone + Serialize + BoundedValue + Debug,
+    Value: Eq + Hash + Clone + DeserializeOwned + Serialize + Debug,
+> OrderedKeyIndex<Key, Value>
 {
     pub fn from_iter<I>(iter: I, data_dir: PathBuf) -> Result<Self>
     where

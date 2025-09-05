@@ -1,10 +1,13 @@
 use std::{
-    fmt::{Debug, Display}, path::PathBuf, pin::Pin, sync::atomic::{AtomicU64, Ordering}
+    fmt::{Debug, Display},
+    path::PathBuf,
+    pin::Pin,
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use anyhow::{Context, Result};
 use ptrie::Trie;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::sync::RwLock;
 use tracing::{instrument, trace};
 
@@ -231,7 +234,7 @@ impl KV {
 }
 
 pub fn format_key<K: Display>(group_key: K, key: &str) -> String {
-    format!("{}:{}", group_key, key)
+    format!("{group_key}:{key}")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

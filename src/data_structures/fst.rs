@@ -2,8 +2,8 @@ use std::{fmt::Debug, fs::File, path::PathBuf};
 
 use anyhow::{Context, Result};
 use fst::{
-    automaton::{Levenshtein, StartsWith},
     Automaton, IntoStreamer, Map, MapBuilder, Streamer,
+    automaton::{Levenshtein, StartsWith},
 };
 use memmap::Mmap;
 

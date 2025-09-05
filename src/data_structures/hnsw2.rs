@@ -1,20 +1,23 @@
 use std::{fmt::Debug, hash::Hash};
 
-use anyhow::Result;
 use crate::hnsw2::{
+    HNSWIndex,
     core::{
         ann_index::ANNIndex,
-        metrics::{real_cosine_similarity, Metric},
+        metrics::{Metric, real_cosine_similarity},
         node::{IdxType, Node},
     },
     hnsw_params::HNSWParams,
-    HNSWIndex,
 };
+use anyhow::Result;
 use serde::{Deserialize, Serialize, Serializer, de::DeserializeOwned};
 
-#[derive(Debug, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 struct DocumentIdWrapper<DocumentId>(DocumentId);
-impl<DocumentId: Serialize + Hash + Send + Sync + Ord + Debug + Clone> IdxType for DocumentIdWrapper<DocumentId> {}
+impl<DocumentId: Serialize + Hash + Send + Sync + Ord + Debug + Clone> IdxType
+    for DocumentIdWrapper<DocumentId>
+{
+}
 impl<DocumentId: Serialize + Hash + Send + Sync> Default for DocumentIdWrapper<DocumentId> {
     fn default() -> Self {
         panic!("DocumentIdWrapper::default() should not be called");
@@ -39,12 +42,6 @@ impl<'de, DocumentId: Deserialize<'de>> Deserialize<'de> for DocumentIdWrapper<D
         Ok(DocumentIdWrapper(inner))
     }
 }
-impl<DocumentId: PartialEq> PartialEq for DocumentIdWrapper<DocumentId> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-impl<DocumentId: Eq> Eq for DocumentIdWrapper<DocumentId> {}
 
 impl<DocumentId: PartialOrd> PartialOrd for DocumentIdWrapper<DocumentId> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -63,7 +60,10 @@ pub struct HNSW2Index<DocumentId: Hash + Send + Sync + Ord + Debug + Clone + Ser
     dim: usize,
 }
 
-impl<DocumentId: Serialize + DeserializeOwned + Sync + Send + Copy + Eq + Ord + Hash + Debug + Clone> HNSW2Index<DocumentId> {
+impl<
+    DocumentId: Serialize + DeserializeOwned + Sync + Send + Copy + Eq + Ord + Hash + Debug + Clone,
+> HNSW2Index<DocumentId>
+{
     pub fn new(dim: usize) -> Self {
         let params = &HNSWParams::<f32>::default();
         Self {
@@ -132,9 +132,9 @@ impl<DocumentId: Serialize + DeserializeOwned + Sync + Send + Copy + Eq + Ord + 
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use rand::distr::{Distribution, Uniform};
     use super::*;
+    use rand::distr::{Distribution, Uniform};
+    use std::collections::HashMap;
 
     #[test]
     fn test_hnsw2() {
@@ -157,14 +157,7 @@ mod tests {
 
         let res: HashMap<_, _> = v.into_iter().collect();
 
-        assert_eq!(
-            res,
-            HashMap::from([
-                (0, 1.0),
-                (1, 0.0),
-                (2, 0.0),
-            ])
-        )
+        assert_eq!(res, HashMap::from([(0, 1.0), (1, 0.0), (2, 0.0),]))
     }
 
     #[test]

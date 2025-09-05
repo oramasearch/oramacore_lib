@@ -1,3 +1,3 @@
 mod bkd;
 
-pub use bkd::{haversine_distance, BKDTree, Coord, Point};
+pub use bkd::{BKDTree, Coord, Point, haversine_distance};

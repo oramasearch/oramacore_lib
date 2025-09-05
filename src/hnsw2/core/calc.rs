@@ -32,11 +32,7 @@ pub fn split_imbalance<T>(vec1: &[T], vec2: &[T]) -> f64 {
     let ls = vec1.len() as f64;
     let rs = vec2.len() as f64;
     let f = ls / (ls + rs + 1e-9);
-    if f > (1.0 - f) {
-        f
-    } else {
-        1.0 - f
-    }
+    if f > (1.0 - f) { f } else { 1.0 - f }
 }
 
 #[cfg(test)]

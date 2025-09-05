@@ -1,8 +1,8 @@
 use super::PinRule;
+use crate::fs::*;
 use crate::pin_rules::file_util::{is_rule_file, remove_rule_file};
 use anyhow::Context;
 use debug_panic::debug_panic;
-use crate::fs::*;
 use std::{collections::HashMap, fmt::Debug, path::PathBuf};
 use thiserror::Error;
 use tracing::error;
@@ -129,8 +129,8 @@ impl PinRulesWriter {
 #[cfg(test)]
 mod pin_rules_tests {
     use super::*;
-    use crate::pin_rules::Consequence;
     use crate::fs::generate_new_path;
+    use crate::pin_rules::Consequence;
 
     #[tokio::test]
     async fn test_simple() {

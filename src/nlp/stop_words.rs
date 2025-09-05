@@ -12,8 +12,8 @@ pub fn get_stop_words(locale: Locale) -> Option<StopWords> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::locales::Locale;
+    use super::*;
 
     #[test]
     fn test_stop_words1() {

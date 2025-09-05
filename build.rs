@@ -8,17 +8,18 @@ fn main() {
 
     println!("folder: {:?}", base_dir.join(RELATIVE_STOP_WORDS_PATH));
 
-    let stop_words: HashMap<String, String> = std::fs::read_dir(base_dir.join(RELATIVE_STOP_WORDS_PATH))
-        .expect("Failed to read stop words directory")
-        .filter_map(|dir| dir.ok())
-        .filter_map(|dir| {
-            let filepath = dir.file_name().to_str()?.to_string();
-            let (lang, _) = filepath.split_once(".").unwrap();
-            let stop_words = std::fs::read_to_string(dir.path()).ok()?;
+    let stop_words: HashMap<String, String> =
+        std::fs::read_dir(base_dir.join(RELATIVE_STOP_WORDS_PATH))
+            .expect("Failed to read stop words directory")
+            .filter_map(|dir| dir.ok())
+            .filter_map(|dir| {
+                let filepath = dir.file_name().to_str()?.to_string();
+                let (lang, _) = filepath.split_once(".").unwrap();
+                let stop_words = std::fs::read_to_string(dir.path()).ok()?;
 
-            Some((lang.to_owned(), stop_words))
-        })
-        .collect();
+                Some((lang.to_owned(), stop_words))
+            })
+            .collect();
     println!(
         "cargo::rerun-if-changed={}",
         base_dir.join(RELATIVE_STOP_WORDS_PATH).display()

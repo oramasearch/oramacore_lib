@@ -5,9 +5,9 @@ use std::{
     path::PathBuf,
 };
 
+use crate::fs::{BufferedFile, create_if_not_exists};
 use anyhow::{Context, Result};
-use crate::fs::{create_if_not_exists, BufferedFile};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub struct Map<Key, Value> {
     // Probably hashmap isn't a good choice here
@@ -26,9 +26,9 @@ impl<Key: Debug, Value: Debug> Debug for Map<Key, Value> {
 }
 
 impl<
-        Key: Eq + Hash + Serialize + DeserializeOwned + Debug,
-        Value: Serialize + DeserializeOwned + Debug,
-    > Map<Key, Value>
+    Key: Eq + Hash + Serialize + DeserializeOwned + Debug,
+    Value: Serialize + DeserializeOwned + Debug,
+> Map<Key, Value>
 {
     pub fn from_hash_map(hash_map: HashMap<Key, Value>, file_path: PathBuf) -> Result<Self> {
         let s = Self {

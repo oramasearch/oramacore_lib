@@ -154,13 +154,11 @@ impl Tokenizer {
     where
         'a: 'b,
     {
-        let b = self
-            .split_regex
+        self.split_regex
             .split(input)
             .filter(|token| !token.is_empty())
             .filter_map(|token| self.normalize_token(token.to_lowercase()))
-            .filter(|token| !token.is_empty() && !self.stop_words.contains(token.as_str()));
-        b
+            .filter(|token| !token.is_empty() && !self.stop_words.contains(token.as_str()))
     }
 
     fn normalize_token(&self, token: String) -> Option<String> {

@@ -450,7 +450,7 @@ mod tests {
 
     use super::*;
     use bincode;
-    use rand::{rngs::StdRng, Rng, SeedableRng};
+    use rand::{Rng, SeedableRng, rngs::StdRng};
 
     fn distance2<T: Copy + PartialOrd + num_traits::Float>(c1: &Coord<T>, c2: &Coord<T>) -> f32 {
         let dx = num_traits::cast::<T, f32>(c1.lat - c2.lat).unwrap();

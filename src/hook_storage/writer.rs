@@ -70,26 +70,26 @@ impl HookWriter {
             Err(JSRunnerError::DefaultExportIsNotAnObject) => {
                 return Err(HookWriterError::ExportError(
                     "Default export is not an object".to_string(),
-                ))
+                ));
             }
             Err(JSRunnerError::NoExportedFunction(fn_name)) => {
                 return Err(HookWriterError::ExportError(format!(
                     "Default export doesn't contain `{fn_name}` property"
-                )))
+                )));
             }
             Err(JSRunnerError::ExportedElementNotAFunction) => {
                 return Err(HookWriterError::ExportError(format!(
                     "Default exported `{}` should be a function",
                     hook_type.get_function_name()
-                )))
+                )));
             }
             Err(JSRunnerError::CompilationError(e)) => {
-                return Err(HookWriterError::CompilationError(e.exception_message))
+                return Err(HookWriterError::CompilationError(e.exception_message));
             }
             Err(e) => {
                 return Err(HookWriterError::Generic(anyhow::anyhow!(
                     "Unknown JS error {e:?}"
-                )))
+                )));
             }
             Ok(_) => {}
         };
