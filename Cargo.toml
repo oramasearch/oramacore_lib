@@ -44,6 +44,7 @@ tempfile = { version = "3", optional = true }
 
 [dev-dependencies]
 tempfile = { version = "3" }
+criterion = { version = "0.5.1", features = ["async_tokio"] }
 
 [features]
 no_thread = []
