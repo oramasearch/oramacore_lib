@@ -11,7 +11,7 @@ use tracing::{error, info};
 use crate::fs::{BufferedFile, create_if_not_exists};
 
 pub struct AnalyticConfig {
-    data_dir: PathBuf,
+    pub data_dir: PathBuf,
 }
 
 pub struct AnalyticsStorage<Event> {
