@@ -1,5 +1,6 @@
 pub mod analytics;
 pub mod bkd;
+pub mod casting;
 pub mod data_structures;
 pub mod filters;
 pub mod fs;
