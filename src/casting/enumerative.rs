@@ -25,6 +25,23 @@
 /// assert!(result.is_enum);
 /// assert_eq!(result.enum_value, Some("engineer".to_string()));
 /// ```
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum EnumerativeParserError {
+    #[error(
+        "Parse error: Expected single ('), double (\") or backtick (`) quote at position {0}. Found \"{1}\" instead."
+    )]
+    InvalidQuoteChar(usize, char),
+    #[error(
+        "Parse error: Expected closing parenthesis at the end of enum call. Found \"{0}\" instead."
+    )]
+    MissingCloseParenthesis(char),
+    #[error(
+        "Parse error: Mismatched closing quote for enum value. Expected \" {0} \" but found \" {1} \"."
+    )]
+    MismatchedClosingQuote(char, char),
+}
 
 static ESCAPABLE_CHARS: [char; 4] = ['\'', '"', '`', ')'];
 
@@ -35,24 +52,34 @@ enum QuoteStyle {
     Backtick,
 }
 
+impl Into<char> for QuoteStyle {
+    fn into(self) -> char {
+        match self {
+            QuoteStyle::Single => '\'',
+            QuoteStyle::Double => '"',
+            QuoteStyle::Backtick => '`',
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
-pub struct Enumerative {
+pub struct Enumerative<'input> {
     pub is_enum: bool,
     pub enum_value: Option<String>,
 
-    raw_value: String,
+    raw_value: &'input str,
     chars: Vec<char>,
     cursor: usize,
     inside_enum: bool,
     quote_char: Option<QuoteStyle>,
 }
 
-impl Enumerative {
-    pub fn new(value: &str) -> Self {
+impl<'input> Enumerative<'input> {
+    pub fn new(value: &'input str) -> Self {
         Enumerative {
             is_enum: false,
             enum_value: None,
-            raw_value: value.to_string().trim().to_string(),
+            raw_value: value.trim(),
             chars: value.chars().collect(),
             cursor: 0,
             inside_enum: false,
@@ -60,7 +87,7 @@ impl Enumerative {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn parse(mut self) -> Result<Self, EnumerativeParserError> {
         // Early exit in case it doesn't start with "enum(".
         if !self.raw_value.starts_with("enum(") {
             return Ok(self.clone());
@@ -72,41 +99,28 @@ impl Enumerative {
 
         // The first character of an enum call should be either a single, double, or backtick quote.
         if self.quote_char.is_none() {
-            let err = format!(
-                "Parse error: Expected single ('), double (\") or backtick (`) quote at position {}. Found \"{}\" instead.",
+            return Err(EnumerativeParserError::InvalidQuoteChar(
                 self.cursor,
-                self.chars.get(self.cursor).unwrap_or(&' ')
-            );
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                err,
-            )));
+                *self.chars.get(self.cursor).unwrap_or(&' '),
+            ));
         }
 
         // If the last character is not a closing parenthesis, it's an error.
         if self.chars.last() != Some(&')') {
-            let err = format!(
-                "Parse error: Expected closing parenthesis at the end of enum call. Found \"{}\" instead.",
-                self.chars.last().unwrap_or(&' ')
-            );
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                err,
-            )));
+            return Err(EnumerativeParserError::MissingCloseParenthesis(
+                *self.chars.last().unwrap_or(&' '),
+            ));
         }
 
         // If the second to last character is not a matching quote, it's an error.
         let last_but_one = self.chars.len().checked_sub(2);
         if self.peek_quote_char_at(last_but_one) != self.quote_char {
-            let err = format!(
-                "Parse error: Mismatched closing quote for enum value. Expected {:?} but found {:?}.",
-                self.quote_char,
+            return Err(EnumerativeParserError::MismatchedClosingQuote(
+                self.quote_char.clone().unwrap_or(QuoteStyle::Double).into(), // @todo: we should never be in the 'or' condition of this unwrap.
                 self.peek_quote_char_at(last_but_one)
-            );
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                err,
-            )));
+                    .unwrap_or(QuoteStyle::Double)
+                    .into(),
+            ));
         }
 
         // If no error is found, we can safely assume we're inside an enum call.
