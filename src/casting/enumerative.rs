@@ -19,9 +19,7 @@
 /// Enumerative parser usage:
 ///
 /// ```rs
-/// let mut parser = Enumerative::new("enum(\"engineer\")");
-///
-/// let result = parser.parse();
+/// let result = Enumerative::parse("enum(\"engineer\")");
 /// assert!(result.is_enum);
 /// assert_eq!(result.enum_value, Some("engineer".to_string()));
 /// ```
@@ -75,8 +73,8 @@ pub struct Enumerative<'input> {
 }
 
 impl<'input> Enumerative<'input> {
-    pub fn new(value: &'input str) -> Self {
-        Enumerative {
+    pub fn parse(value: &'input str) -> Result<Self, EnumerativeParserError> {
+        let mut parser = Enumerative {
             is_enum: false,
             enum_value: None,
             raw_value: value.trim(),
@@ -84,75 +82,78 @@ impl<'input> Enumerative<'input> {
             cursor: 0,
             inside_enum: false,
             quote_char: None,
-        }
-    }
+        };
 
-    pub fn parse(mut self) -> Result<Self, EnumerativeParserError> {
         // Early exit in case it doesn't start with "enum(".
-        if !self.raw_value.starts_with("enum(") {
-            return Ok(self.clone());
+        if !parser.raw_value.starts_with("enum(") {
+            return Ok(parser.clone());
         }
 
-        self.inside_enum = true;
-        self.cursor += 5; // Move past "enum("
-        self.quote_char = self.peek_quote_char_at(None);
+        parser.inside_enum = true;
+        parser.cursor += 5; // Move past "enum("
+        parser.quote_char = parser.peek_quote_char_at(None);
 
         // The first character of an enum call should be either a single, double, or backtick quote.
-        if self.quote_char.is_none() {
+        if parser.quote_char.is_none() {
             return Err(EnumerativeParserError::InvalidQuoteChar(
-                self.cursor,
-                *self.chars.get(self.cursor).unwrap_or(&' '),
+                parser.cursor,
+                *parser.chars.get(parser.cursor).unwrap_or(&' '),
             ));
         }
 
         // If the last character is not a closing parenthesis, it's an error.
-        if self.chars.last() != Some(&')') {
+        if parser.chars.last() != Some(&')') {
             return Err(EnumerativeParserError::MissingCloseParenthesis(
-                *self.chars.last().unwrap_or(&' '),
+                *parser.chars.last().unwrap_or(&' '),
             ));
         }
 
         // If the second to last character is not a matching quote, it's an error.
-        let last_but_one = self.chars.len().checked_sub(2);
-        if self.peek_quote_char_at(last_but_one) != self.quote_char {
+        let last_but_one = parser.chars.len().checked_sub(2);
+        if parser.peek_quote_char_at(last_but_one) != parser.quote_char {
             return Err(EnumerativeParserError::MismatchedClosingQuote(
-                self.quote_char.clone().unwrap_or(QuoteStyle::Double).into(), // @todo: we should never be in the 'or' condition of this unwrap.
-                self.peek_quote_char_at(last_but_one)
+                parser
+                    .quote_char
+                    .clone()
+                    .unwrap_or(QuoteStyle::Double)
+                    .into(), // @todo: we should never be in the 'or' condition of this unwrap.
+                parser
+                    .peek_quote_char_at(last_but_one)
                     .unwrap_or(QuoteStyle::Double)
                     .into(),
             ));
         }
 
         // If no error is found, we can safely assume we're inside an enum call.
-        self.inside_enum = true;
+        parser.inside_enum = true;
         // Move past the opening quote.
-        self.cursor += 1;
+        parser.cursor += 1;
 
         // Cursor now should be in position 6:
         // enum("...
         // so it's time to start reading and accumulating the enum value.
         let mut enum_value = String::new();
 
-        while self.cursor < self.chars.len() {
-            let current_char = self.chars[self.cursor];
+        while parser.cursor < parser.chars.len() {
+            let current_char = parser.chars[parser.cursor];
             dbg!("Current char: {}", current_char);
 
             // Current char could be an escaped quote, parenthesis, or backlash.
             if current_char == '\\' {
-                let next_char = self.chars.get(self.cursor + 1);
+                let next_char = parser.chars.get(parser.cursor + 1);
                 if ESCAPABLE_CHARS.contains(next_char.unwrap_or(&' ')) {
                     enum_value.push(*next_char.unwrap());
-                    self.cursor += 2; // Skip the escape character and the escaped character.
+                    parser.cursor += 2; // Skip the escape character and the escaped character.
                     continue;
                 } else {
                     enum_value.push(current_char);
-                    self.cursor += 1;
+                    parser.cursor += 1;
                     continue;
                 }
             }
 
             // If we find the closing quote, we should stop accumulating.
-            if let Some(quote_style) = &self.quote_char {
+            if let Some(quote_style) = &parser.quote_char {
                 let is_closing_quote = match quote_style {
                     QuoteStyle::Single => current_char == '\'',
                     QuoteStyle::Double => current_char == '"',
@@ -163,14 +164,14 @@ impl<'input> Enumerative<'input> {
                 }
             }
 
-            self.cursor += 1;
+            parser.cursor += 1;
             enum_value.push(current_char);
         }
 
         Ok(Enumerative {
             is_enum: true,
             enum_value: Some(enum_value),
-            ..self.clone()
+            ..parser.clone()
         })
     }
 
@@ -193,49 +194,42 @@ mod tests {
 
     #[test]
     fn simple_enum_parsing() {
-        let mut parser = Enumerative::new("enum(\"engineer\")");
-
-        let result = parser.parse().unwrap();
+        let result = Enumerative::parse("enum(\"engineer\")").unwrap();
         assert!(result.is_enum);
         assert_eq!(result.enum_value, Some("engineer".to_string()));
     }
 
     #[test]
     fn simple_enum_parsing_single_quotes() {
-        let mut parser = Enumerative::new("enum('engineer')");
-        let result = parser.parse().unwrap();
+        let result = Enumerative::parse("enum('engineer')").unwrap();
         assert!(result.is_enum);
         assert_eq!(result.enum_value, Some("engineer".to_string()));
     }
 
     #[test]
     fn simple_enum_parsing_backtick_quotes() {
-        let mut parser = Enumerative::new("enum(`engineer`)");
-        let result = parser.parse().unwrap();
+        let result = Enumerative::parse("enum(`engineer`)").unwrap();
         assert!(result.is_enum);
         assert_eq!(result.enum_value, Some("engineer".to_string()));
     }
 
     #[test]
     fn enum_parsing_with_escaped_quotes() {
-        let mut parser = Enumerative::new("enum(\"engi\\\"neer\")");
-        let result = parser.parse().unwrap();
+        let result = Enumerative::parse("enum(\"engi\\\"neer\")").unwrap();
         assert!(result.is_enum);
         assert_eq!(result.enum_value, Some("engi\"neer".to_string()));
     }
 
     #[test]
     fn enum_parsing_with_mixed_quotes() {
-        let mut parser = Enumerative::new("enum('engi`neer')");
-        let result = parser.parse().unwrap();
+        let result = Enumerative::parse("enum('engi`neer')").unwrap();
         assert!(result.is_enum);
         assert_eq!(result.enum_value, Some("engi`neer".to_string()));
     }
 
     #[test]
     fn enum_parsing_with_escaped_backslash() {
-        let mut parser = Enumerative::new("enum(\"engi\\neer\")");
-        let result = parser.parse().unwrap();
+        let result = Enumerative::parse("enum(\"engi\\neer\")").unwrap();
         assert!(result.is_enum);
         assert_eq!(result.enum_value, Some("engi\\neer".to_string()));
     }
@@ -244,37 +238,32 @@ mod tests {
     // In that case, we do not expect an error.
     #[test]
     fn enum_parsing_missing_opening_parenthesis() {
-        let mut parser = Enumerative::new("enum\"engineer\")");
-        let result = parser.parse().unwrap();
+        let result = Enumerative::parse("enum\"engineer\")").unwrap();
         assert!(!result.is_enum);
         assert_eq!(result.enum_value, None);
     }
 
     #[test]
     fn enum_parsing_missing_opening_quote() {
-        let mut parser = Enumerative::new("enum(engineer\")");
-        let result = parser.parse();
+        let result = Enumerative::parse("enum(engineer\")");
         assert!(result.is_err());
     }
 
     #[test]
     fn enum_parsing_missing_closing_parenthesis() {
-        let mut parser = Enumerative::new("enum(\"engineer\"");
-        let result = parser.parse();
+        let result = Enumerative::parse("enum(\"engineer\"");
         assert!(result.is_err());
     }
 
     #[test]
     fn enum_parsing_missing_closing_quote() {
-        let mut parser = Enumerative::new("enum(\"engineer)");
-        let result = parser.parse();
+        let result = Enumerative::parse("enum(\"engineer)");
         assert!(result.is_err());
     }
 
     #[test]
     fn enum_parsing_mismatched_closing_quote() {
-        let mut parser = Enumerative::new("enum(\"engineer')");
-        let result = parser.parse();
+        let result = Enumerative::parse("enum(\"engineer')");
         assert!(result.is_err());
     }
 }
