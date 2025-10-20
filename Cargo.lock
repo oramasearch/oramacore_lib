@@ -2641,6 +2641,7 @@ dependencies = [
  "oramacore_ptrie",
  "ordered-float",
  "parking_lot",
+ "rallo",
  "rand 0.9.2",
  "rayon",
  "regex",
@@ -2974,6 +2975,18 @@ name = "radium"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
+
+[[package]]
+name = "rallo"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aba100f67609cfc89c24493982dd55178bd1f28c7bd16f4c5dd3dd15a47fdbd7"
+dependencies = [
+ "backtrace",
+ "rustc-demangle",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "rand"

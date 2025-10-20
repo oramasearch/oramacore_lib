@@ -14,6 +14,7 @@ use rand::prelude::*;
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::BinaryHeap;
 
 use std::collections::HashMap;
@@ -280,7 +281,7 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
         has_deletion: bool,
     ) -> BinaryHeap<Neighbor<E, usize>> {
         let mut candidates: BinaryHeap<Neighbor<E, usize>> = BinaryHeap::new();
-        let mut top_candidates: BinaryHeap<Neighbor<E, usize>> = BinaryHeap::new();
+        let mut top_candidates: BinaryHeap<Neighbor<E, usize>> = BinaryHeap::with_capacity(ef);
         for neighbor in sorted_candidates.iter() {
             let root = neighbor.idx();
             if !has_deletion || !self.is_deleted(root) {
@@ -330,6 +331,8 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
                 }
             });
         }
+
+        // println!("top_candidates {}. {}", top_candidates.len(), ef);
 
         top_candidates
     }
@@ -647,7 +650,7 @@ impl<E: node::FloatElement, T: node::IdxType> ann_index::ANNIndex<E, T> for HNSW
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]
-pub struct HNSWIndexDump<E: node::FloatElement, T: node::IdxType> {
+pub struct HNSWIndexDump<'hsnw, E: node::FloatElement, T: node::IdxType> {
     _dimension: usize, // dimension
     _n_items: usize,   // next item count
     _n_constructed_items: usize,
@@ -666,8 +669,8 @@ pub struct HNSWIndexDump<E: node::FloatElement, T: node::IdxType> {
     // use for serde
     _id2neighbor_tmp: Vec<Vec<Vec<usize>>>,
     _id2neighbor0_tmp: Vec<Vec<usize>>,
-    _nodes_tmp: Vec<node::Node<E, T>>,
-    _item2id_tmp: Vec<(T, usize)>,
+    _nodes_tmp: Vec<Cow<'hsnw, Box<node::Node<E, T>>>>,
+    _item2id_tmp: Vec<(Cow<'hsnw, T>, usize)>,
     _delete_ids_tmp: Vec<usize>,
 }
 
@@ -689,8 +692,12 @@ impl<E: node::FloatElement, T: node::IdxType> Serialize for HNSWIndex<E, T> {
             .map(|x| x.read().unwrap().clone())
             .collect();
 
-        let _nodes_tmp = self._nodes.iter().map(|x| *x.clone()).collect();
-        let _item2id_tmp = self._item2id.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        let _nodes_tmp = self._nodes.iter().map(Cow::Borrowed).collect();
+        let _item2id_tmp = self
+            ._item2id
+            .iter()
+            .map(|(k, v)| (Cow::Borrowed(k), *v))
+            .collect();
         let _delete_ids_tmp = self._delete_ids.iter().copied().collect();
 
         let dump = HNSWIndexDump {
@@ -730,8 +737,8 @@ impl<'de, E: node::FloatElement + DeserializeOwned, T: node::IdxType + Deseriali
 
         let _nodes: Vec<_> = dump
             ._nodes_tmp
-            .iter()
-            .map(|x| Box::new(x.clone()))
+            .into_iter()
+            .map(|x| x.into_owned())
             .collect();
 
         let _id2neighbor = dump
@@ -746,7 +753,15 @@ impl<'de, E: node::FloatElement + DeserializeOwned, T: node::IdxType + Deseriali
             .map(RwLock::new)
             .collect::<Vec<_>>();
 
-        let _item2id = dump._item2id_tmp.into_iter().collect::<HashMap<_, _>>();
+        let _item2id = dump
+            ._item2id_tmp
+            .into_iter()
+            .map(|(k, v)| {
+                // K is always owned here
+                // serde allocates it by itself
+                (k.into_owned(), v)
+            })
+            .collect::<HashMap<_, _>>();
         let _delete_ids = dump._delete_ids_tmp.into_iter().collect::<HashSet<_>>();
 
         Ok(Self {
@@ -774,7 +789,7 @@ impl<'de, E: node::FloatElement + DeserializeOwned, T: node::IdxType + Deseriali
 }
 
 #[cfg(test)]
-mod tests {
+mod hsnw_tests {
     use super::core::{ann_index::ANNIndex, metrics::Metric};
 
     use super::*;
@@ -811,5 +826,12 @@ mod tests {
         let v2 = new_index.search(&target, 10);
 
         assert_eq!(v1, v2);
+    }
+
+    #[test]
+    fn test_serde_backcompatibility() {
+        let b = include_bytes!("./dump.hsnw");
+        let new_index: HNSWIndex<f32, usize> = bincode::deserialize(b).unwrap();
+        assert_eq!(new_index.len(), 100);
     }
 }

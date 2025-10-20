@@ -108,11 +108,31 @@ impl<E: FloatElement, T: IdxType> Node<E, T> {
         }
     }
 
+    /// new without idx
+    ///
+    /// new a point without a idx
+    pub fn new_owned(vectors: Vec<E>) -> Node<E, T> {
+        Node::<E, T>::valid_elements(&vectors);
+        Node {
+            vectors,
+            idx: Option::None,
+        }
+    }
+
     /// new with idx
     ///
     /// new a point with a idx
     pub fn new_with_idx(vectors: &[E], id: T) -> Node<E, T> {
         let mut n = Node::new(vectors);
+        n.set_idx(id);
+        n
+    }
+
+    /// new with idx
+    ///
+    /// new a point with a idx
+    pub fn new_with_idx_owned(vectors: Vec<E>, id: T) -> Node<E, T> {
+        let mut n = Node::new_owned(vectors);
         n.set_idx(id);
         n
     }
