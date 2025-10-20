@@ -96,6 +96,12 @@ impl<
             .map_err(|e| anyhow::anyhow!(e))
     }
 
+    pub fn add_owned(&mut self, point: Vec<f32>, id: DocumentId) -> Result<()> {
+        self.inner
+            .add_owned(point, DocumentIdWrapper(id))
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+
     pub fn build(&mut self) -> Result<()> {
         self.inner
             .build(Metric::Euclidean)

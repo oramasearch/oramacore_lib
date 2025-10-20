@@ -41,6 +41,13 @@ pub trait ANNIndex<E: node::FloatElement, T: node::IdxType>: Send + Sync {
         self.add_node(&node::Node::new_with_idx(vs, idx))
     }
 
+    /// add node with owned data
+    ///
+    /// call `add_node()` internal
+    fn add_owned(&mut self, vs: Vec<E>, idx: T) -> Result<(), &'static str> {
+        self.add_node(&node::Node::new_with_idx_owned(vs, idx))
+    }
+
     /// add multiple node one time
     ///
     /// return `Err(&'static str)` if there is something wrong with the adding process, and the `static str` is the debug reason
