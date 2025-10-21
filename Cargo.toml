@@ -54,3 +54,11 @@ rallo = { version = "0.5" }
 no_thread = []
 generate_new_path = ["tempfile"]
 track_allocations = []
+
+[[bench]]
+name = "simd_metrics"
+harness = false
+
+[[bench]]
+name = "hnsw"
+harness = false

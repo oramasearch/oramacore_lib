@@ -9,23 +9,28 @@ pub trait SIMDOptmized<T = Self> {
 }
 
 impl SIMDOptmized for f64 {
+    #[inline(always)]
     fn real_dot_product(a: &[Self], b: &[Self]) -> Result<Self, &'static str> {
-        let a = Self::dot_product(a, b)?;
-        Ok(-a)
-    }
-
-    fn dot_product(a: &[Self], b: &[Self]) -> Result<Self, &'static str> {
         same_dimension(a, b)?;
         let arch = Arch::new();
         Ok(arch.dispatch(DotProduct(a, b)))
     }
 
+    #[inline(always)]
+    fn dot_product(a: &[Self], b: &[Self]) -> Result<Self, &'static str> {
+        same_dimension(a, b)?;
+        let arch = Arch::new();
+        Ok(-arch.dispatch(DotProduct(a, b)))
+    }
+
+    #[inline(always)]
     fn manhattan_distance(a: &[Self], b: &[Self]) -> Result<Self, &'static str> {
         same_dimension(a, b)?;
         let arch = Arch::new();
         Ok(arch.dispatch(ManhattanDistance(a, b)))
     }
 
+    #[inline(always)]
     fn euclidean_distance(a: &[Self], b: &[Self]) -> Result<Self, &'static str> {
         same_dimension(a, b)?;
         let arch = Arch::new();
@@ -34,16 +39,18 @@ impl SIMDOptmized for f64 {
 }
 
 impl SIMDOptmized for f32 {
+    #[inline(always)]
     fn real_dot_product(a: &[Self], b: &[Self]) -> Result<Self, &'static str> {
-        let a = Self::dot_product(a, b)?;
-        Ok(-a)
+        same_dimension(a, b)?;
+        let arch = Arch::new();
+        Ok(arch.dispatch(DotProduct(a, b)))
     }
 
     #[inline(always)]
     fn dot_product(a: &[Self], b: &[Self]) -> Result<Self, &'static str> {
         same_dimension(a, b)?;
         let arch = Arch::new();
-        Ok(arch.dispatch(DotProduct(a, b)))
+        Ok(-arch.dispatch(DotProduct(a, b)))
     }
 
     #[inline(always)]
@@ -70,12 +77,25 @@ impl<'a> WithSimd for EuclideanDistance<'a, f64> {
         let (a_head, a_tail) = S::as_simd_f64s(self.0);
         let (b_head, b_tail) = S::as_simd_f64s(self.1);
 
-        let mut sum = simd.splat_f64s(0.0);
-        for (&a, &b) in a_head.iter().zip(b_head) {
-            let diff = simd.sub_f64s(a, b);
-            sum = simd.mul_add_f64s(diff, diff, sum);
+        let mut sum1 = simd.splat_f64s(0.0);
+        let mut sum2 = simd.splat_f64s(0.0);
+
+        let mut i = 0;
+        while i + 1 < a_head.len() {
+            let diff1 = simd.sub_f64s(a_head[i], b_head[i]);
+            sum1 = simd.mul_add_f64s(diff1, diff1, sum1);
+            let diff2 = simd.sub_f64s(a_head[i + 1], b_head[i + 1]);
+            sum2 = simd.mul_add_f64s(diff2, diff2, sum2);
+            i += 2;
         }
 
+        // Handle remainder if odd number of SIMD vectors
+        if i < a_head.len() {
+            let diff = simd.sub_f64s(a_head[i], b_head[i]);
+            sum1 = simd.mul_add_f64s(diff, diff, sum1);
+        }
+
+        let sum = simd.add_f64s(sum1, sum2);
         let mut scalar_sum = simd.reduce_sum_f64s(sum);
         for (&a, &b) in a_tail.iter().zip(b_tail) {
             scalar_sum += (a - b).powi(2);
@@ -92,12 +112,25 @@ impl<'a> WithSimd for EuclideanDistance<'a, f32> {
         let (a_head, a_tail) = S::as_simd_f32s(self.0);
         let (b_head, b_tail) = S::as_simd_f32s(self.1);
 
-        let mut sum = simd.splat_f32s(0.0);
-        for (&a, &b) in a_head.iter().zip(b_head) {
-            let diff = simd.sub_f32s(a, b);
-            sum = simd.mul_add_f32s(diff, diff, sum);
+        let mut sum1 = simd.splat_f32s(0.0);
+        let mut sum2 = simd.splat_f32s(0.0);
+
+        let mut i = 0;
+        while i + 1 < a_head.len() {
+            let diff1 = simd.sub_f32s(a_head[i], b_head[i]);
+            sum1 = simd.mul_add_f32s(diff1, diff1, sum1);
+            let diff2 = simd.sub_f32s(a_head[i + 1], b_head[i + 1]);
+            sum2 = simd.mul_add_f32s(diff2, diff2, sum2);
+            i += 2;
         }
 
+        // Handle remainder if odd number of SIMD vectors
+        if i < a_head.len() {
+            let diff = simd.sub_f32s(a_head[i], b_head[i]);
+            sum1 = simd.mul_add_f32s(diff, diff, sum1);
+        }
+
+        let sum = simd.add_f32s(sum1, sum2);
         let mut scalar_sum = simd.reduce_sum_f32s(sum);
         for (&a, &b) in a_tail.iter().zip(b_tail) {
             scalar_sum += (a - b).powi(2);
@@ -115,13 +148,28 @@ impl<'a> WithSimd for ManhattanDistance<'a, f64> {
         let (a_head, a_tail) = S::as_simd_f64s(self.0);
         let (b_head, b_tail) = S::as_simd_f64s(self.1);
 
-        let mut sum = simd.splat_f64s(0.0);
-        for (&a, &b) in a_head.iter().zip(b_head) {
-            let diff = simd.sub_f64s(a, b);
-            let abs_diff = simd.abs_f64s(diff);
-            sum = simd.add_f64s(sum, abs_diff);
+        let mut sum1 = simd.splat_f64s(0.0);
+        let mut sum2 = simd.splat_f64s(0.0);
+
+        let mut i = 0;
+        while i + 1 < a_head.len() {
+            let diff1 = simd.sub_f64s(a_head[i], b_head[i]);
+            let abs_diff1 = simd.abs_f64s(diff1);
+            sum1 = simd.add_f64s(sum1, abs_diff1);
+            let diff2 = simd.sub_f64s(a_head[i + 1], b_head[i + 1]);
+            let abs_diff2 = simd.abs_f64s(diff2);
+            sum2 = simd.add_f64s(sum2, abs_diff2);
+            i += 2;
         }
 
+        // Handle remainder if odd number of SIMD vectors
+        if i < a_head.len() {
+            let diff = simd.sub_f64s(a_head[i], b_head[i]);
+            let abs_diff = simd.abs_f64s(diff);
+            sum1 = simd.add_f64s(sum1, abs_diff);
+        }
+
+        let sum = simd.add_f64s(sum1, sum2);
         let mut scalar_sum = simd.reduce_sum_f64s(sum);
         for (&a, &b) in a_tail.iter().zip(b_tail) {
             scalar_sum += (a - b).abs();
@@ -138,13 +186,28 @@ impl<'a> WithSimd for ManhattanDistance<'a, f32> {
         let (a_head, a_tail) = S::as_simd_f32s(self.0);
         let (b_head, b_tail) = S::as_simd_f32s(self.1);
 
-        let mut sum = simd.splat_f32s(0.0);
-        for (&a, &b) in a_head.iter().zip(b_head) {
-            let diff = simd.sub_f32s(a, b);
-            let abs_diff = simd.abs_f32s(diff);
-            sum = simd.add_f32s(sum, abs_diff);
+        let mut sum1 = simd.splat_f32s(0.0);
+        let mut sum2 = simd.splat_f32s(0.0);
+
+        let mut i = 0;
+        while i + 1 < a_head.len() {
+            let diff1 = simd.sub_f32s(a_head[i], b_head[i]);
+            let abs_diff1 = simd.abs_f32s(diff1);
+            sum1 = simd.add_f32s(sum1, abs_diff1);
+            let diff2 = simd.sub_f32s(a_head[i + 1], b_head[i + 1]);
+            let abs_diff2 = simd.abs_f32s(diff2);
+            sum2 = simd.add_f32s(sum2, abs_diff2);
+            i += 2;
         }
 
+        // Handle remainder if odd number of SIMD vectors
+        if i < a_head.len() {
+            let diff = simd.sub_f32s(a_head[i], b_head[i]);
+            let abs_diff = simd.abs_f32s(diff);
+            sum1 = simd.add_f32s(sum1, abs_diff);
+        }
+
+        let sum = simd.add_f32s(sum1, sum2);
         let mut scalar_sum = simd.reduce_sum_f32s(sum);
         for (&a, &b) in a_tail.iter().zip(b_tail) {
             scalar_sum += (a - b).abs();
@@ -162,17 +225,27 @@ impl<'a> WithSimd for DotProduct<'a, f64> {
         let (a_head, a_tail) = S::as_simd_f64s(self.0);
         let (b_head, b_tail) = S::as_simd_f64s(self.1);
 
-        let mut sum = simd.splat_f64s(0.0);
-        for (&a, &b) in a_head.iter().zip(b_head) {
-            let product = simd.mul_f64s(a, b);
-            sum = simd.add_f64s(sum, product);
+        let mut sum1 = simd.splat_f64s(0.0);
+        let mut sum2 = simd.splat_f64s(0.0);
+
+        let mut i = 0;
+        while i + 1 < a_head.len() {
+            sum1 = simd.mul_add_f64s(a_head[i], b_head[i], sum1);
+            sum2 = simd.mul_add_f64s(a_head[i + 1], b_head[i + 1], sum2);
+            i += 2;
         }
 
+        // Handle remainder if odd number of SIMD vectors
+        if i < a_head.len() {
+            sum1 = simd.mul_add_f64s(a_head[i], b_head[i], sum1);
+        }
+
+        let sum = simd.add_f64s(sum1, sum2);
         let mut scalar_sum = simd.reduce_sum_f64s(sum);
         for (&a, &b) in a_tail.iter().zip(b_tail) {
             scalar_sum += a * b;
         }
-        -scalar_sum
+        scalar_sum
     }
 }
 
@@ -184,17 +257,27 @@ impl<'a> WithSimd for DotProduct<'a, f32> {
         let (a_head, a_tail) = S::as_simd_f32s(self.0);
         let (b_head, b_tail) = S::as_simd_f32s(self.1);
 
-        let mut sum = simd.splat_f32s(0.0);
-        for (&a, &b) in a_head.iter().zip(b_head) {
-            let product = simd.mul_f32s(a, b);
-            sum = simd.add_f32s(sum, product);
+        let mut sum1 = simd.splat_f32s(0.0);
+        let mut sum2 = simd.splat_f32s(0.0);
+
+        let mut i = 0;
+        while i + 1 < a_head.len() {
+            sum1 = simd.mul_add_f32s(a_head[i], b_head[i], sum1);
+            sum2 = simd.mul_add_f32s(a_head[i + 1], b_head[i + 1], sum2);
+            i += 2;
         }
 
+        // Handle remainder if odd number of SIMD vectors
+        if i < a_head.len() {
+            sum1 = simd.mul_add_f32s(a_head[i], b_head[i], sum1);
+        }
+
+        let sum = simd.add_f32s(sum1, sum2);
         let mut scalar_sum = simd.reduce_sum_f32s(sum);
         for (&a, &b) in a_tail.iter().zip(b_tail) {
             scalar_sum += a * b;
         }
-        -scalar_sum
+        scalar_sum
     }
 }
 
