@@ -43,13 +43,23 @@ tokio-util = "0.7"
 chrono = { version = "0.4" }
 
 tempfile = { version = "3", optional = true }
+pulp = "0.21.5"
 
 [dev-dependencies]
 tempfile = { version = "3" }
 criterion = { version = "0.5.1", features = ["async_tokio"] }
 rallo = { version = "0.5" }
+approx = "0.5.1"
 
 [features]
 no_thread = []
 generate_new_path = ["tempfile"]
 track_allocations = []
+
+[[bench]]
+name = "simd_metrics"
+harness = false
+
+[[bench]]
+name = "hnsw"
+harness = false
