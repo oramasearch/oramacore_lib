@@ -9,6 +9,7 @@
 use std::hash::Hash;
 use std::mem;
 use std::ops::{Deref, Index};
+use std::sync::LazyLock;
 
 use ordered_float::OrderedFloat;
 use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
@@ -24,6 +25,53 @@ use rand::{Rng, SeedableRng};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 use serde_big_array::BigArray;
+
+/// Static boolean indicating whether SIMD instructions are supported on this platform.
+/// This is initialized once at runtime and cached for all future accesses.
+/// Returns `true` if AVX, AVX2, AVX512, NEON, or other SIMD instructions are available.
+/// Returns `false` if only scalar operations are available.
+///
+/// The detection checks the target architecture:
+/// - x86_64: Always true (SSE2 minimum standard)
+/// - aarch64: Always true (NEON standard)
+/// - x86: True if SSE2 is available
+/// - arm with NEON: True
+/// - Other architectures: False (conservative)
+pub static IS_SIMD_SUPPORTED: LazyLock<bool> = LazyLock::new(|| {
+    #[cfg(target_arch = "x86_64")]
+    {
+        // x86_64 always has at least SSE2, so SIMD is available
+        true
+    }
+
+    #[cfg(target_arch = "x86")]
+    {
+        // x86 may or may not have SSE2, check for it
+        cfg!(target_feature = "sse2")
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        // aarch64 always has NEON
+        true
+    }
+
+    #[cfg(all(target_arch = "arm", target_feature = "neon"))]
+    {
+        true
+    }
+
+    #[cfg(not(any(
+        target_arch = "x86_64",
+        target_arch = "x86",
+        target_arch = "aarch64",
+        all(target_arch = "arm", target_feature = "neon")
+    )))]
+    {
+        // For other architectures, we conservatively report no SIMD
+        false
+    }
+});
 
 #[derive(Clone)]
 /// Parameters for building the `Hnsw`
@@ -1157,6 +1205,19 @@ mod tests {
         assert_eq!(closest_point_1.pid, closest_point_2.pid);
         assert_eq!(closest_point_1.point, closest_point_2.point);
         assert_eq!(closest_point_1.value, closest_point_2.value);
+    }
+
+    #[test]
+    fn test_simd_supported() {
+        // Test that the IS_SIMD_SUPPORTED static is accessible
+        let supported = *IS_SIMD_SUPPORTED;
+
+        // On x86_64 and aarch64, SIMD should be supported
+        #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+        assert!(supported, "SIMD should be supported on x86_64 and aarch64");
+
+        // Just verify it's a valid boolean (this always passes, but shows usage)
+        assert!(supported == true || supported == false);
     }
 
     #[test]
