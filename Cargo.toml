@@ -43,6 +43,7 @@ tokio-util = "0.7"
 chrono = { version = "0.4" }
 
 tempfile = { version = "3", optional = true }
+pulp = "0.21.5"
 
 [dev-dependencies]
 tempfile = { version = "3" }
