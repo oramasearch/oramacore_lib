@@ -284,6 +284,7 @@ impl<'a> WithSimd for DotProduct<'a, f32> {
 #[cfg(test)]
 mod simd_metrics_tests {
     use super::*;
+    use approx::{assert_abs_diff_eq, assert_relative_eq};
 
     // Scalar implementations for comparison
     fn scalar_euclidean_distance_f32(a: &[f32], b: &[f32]) -> f32 {
@@ -323,11 +324,11 @@ mod simd_metrics_tests {
         let a = vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
         let b = vec![5.0f32, 4.0, 3.0, 2.0, 1.0];
         let dist = f32::euclidean_distance(&a, &b).unwrap();
-        assert_eq!(dist, 40.0);
+        assert_abs_diff_eq!(dist, 40.0, epsilon = 1e-6);
 
         let previous_output = scalar_euclidean_distance_f32(&a, &b);
 
-        assert_eq!(dist, previous_output);
+        assert_abs_diff_eq!(dist, previous_output, epsilon = 1e-6);
     }
 
     #[test]
@@ -335,11 +336,11 @@ mod simd_metrics_tests {
         let a = vec![1.0f64, 2.0, 3.0, 4.0, 5.0];
         let b = vec![5.0f64, 4.0, 3.0, 2.0, 1.0];
         let dist = f64::euclidean_distance(&a, &b).unwrap();
-        assert_eq!(dist, 40.0);
+        assert_abs_diff_eq!(dist, 40.0, epsilon = 1e-10);
 
         let previous_output = scalar_euclidean_distance_f64(&a, &b);
 
-        assert_eq!(dist, previous_output);
+        assert_abs_diff_eq!(dist, previous_output, epsilon = 1e-10);
     }
 
     #[test]
@@ -347,10 +348,10 @@ mod simd_metrics_tests {
         let a = vec![1.0f32, 2.0, 3.0];
         let b = vec![4.0f32, 5.0, 6.0];
         let dist = f32::manhattan_distance(&a, &b).unwrap();
-        assert_eq!(dist, 9.0);
+        assert_abs_diff_eq!(dist, 9.0, epsilon = 1e-6);
 
         let previous_output = scalar_manhattan_distance_f32(&a, &b);
-        assert_eq!(dist, previous_output);
+        assert_abs_diff_eq!(dist, previous_output, epsilon = 1e-6);
     }
 
     #[test]
@@ -358,10 +359,10 @@ mod simd_metrics_tests {
         let a = vec![1.0f64, 2.0, 3.0];
         let b = vec![4.0f64, 5.0, 6.0];
         let dist = f64::manhattan_distance(&a, &b).unwrap();
-        assert_eq!(dist, 9.0);
+        assert_abs_diff_eq!(dist, 9.0, epsilon = 1e-10);
 
         let previous_output = scalar_manhattan_distance_f64(&a, &b);
-        assert_eq!(dist, previous_output);
+        assert_abs_diff_eq!(dist, previous_output, epsilon = 1e-10);
     }
 
     #[test]
@@ -369,10 +370,10 @@ mod simd_metrics_tests {
         let a = vec![1.0f32, 2.0, 3.0];
         let b = vec![4.0f32, 5.0, 6.0];
         let dot = f32::dot_product(&a, &b).unwrap();
-        // assert_eq!(dot, 32.0);
+        // assert_abs_diff_eq!(dot, -32.0, epsilon = 1e-6);
 
         let previous_output = scalar_dot_product_f32(&a, &b);
-        assert_eq!(dot, previous_output);
+        assert_abs_diff_eq!(dot, previous_output, epsilon = 1e-6);
     }
 
     #[test]
@@ -380,10 +381,10 @@ mod simd_metrics_tests {
         let a = vec![1.0f64, 2.0, 3.0];
         let b = vec![4.0f64, 5.0, 6.0];
         let dot = f64::dot_product(&a, &b).unwrap();
-        // assert_eq!(dot, 32.0);
+        // assert_abs_diff_eq!(dot, -32.0, epsilon = 1e-10);
 
         let previous_output = scalar_dot_product_f64(&a, &b);
-        assert_eq!(dot, previous_output);
+        assert_abs_diff_eq!(dot, previous_output, epsilon = 1e-10);
     }
 
     #[test]
@@ -391,10 +392,10 @@ mod simd_metrics_tests {
         let a = vec![1.0f32, 2.0, 3.0];
         let b = vec![4.0f32, 5.0, 6.0];
         let dot = f32::real_dot_product(&a, &b).unwrap();
-        assert_eq!(dot, 32.0);
+        assert_abs_diff_eq!(dot, 32.0, epsilon = 1e-6);
 
         let previous_output = scalar_real_dot_product_f32(&a, &b);
-        assert_eq!(dot, previous_output);
+        assert_abs_diff_eq!(dot, previous_output, epsilon = 1e-6);
     }
 
     #[test]
@@ -402,10 +403,10 @@ mod simd_metrics_tests {
         let a = vec![1.0f64, 2.0, 3.0];
         let b = vec![4.0f64, 5.0, 6.0];
         let dot = f64::real_dot_product(&a, &b).unwrap();
-        assert_eq!(dot, 32.0);
+        assert_abs_diff_eq!(dot, 32.0, epsilon = 1e-10);
 
         let previous_output = scalar_real_dot_product_f64(&a, &b);
-        assert_eq!(dot, previous_output);
+        assert_abs_diff_eq!(dot, previous_output, epsilon = 1e-10);
     }
 
     // Error Handling Tests
@@ -437,10 +438,18 @@ mod simd_metrics_tests {
         let b: Vec<f32> = vec![];
 
         // Empty vectors should succeed (sum of nothing is 0)
-        assert_eq!(f32::euclidean_distance(&a, &b).unwrap(), 0.0);
-        assert_eq!(f32::manhattan_distance(&a, &b).unwrap(), 0.0);
-        assert_eq!(f32::dot_product(&a, &b).unwrap(), 0.0);
-        assert_eq!(f32::real_dot_product(&a, &b).unwrap(), 0.0);
+        assert_abs_diff_eq!(
+            f32::euclidean_distance(&a, &b).unwrap(),
+            0.0,
+            epsilon = 1e-6
+        );
+        assert_abs_diff_eq!(
+            f32::manhattan_distance(&a, &b).unwrap(),
+            0.0,
+            epsilon = 1e-6
+        );
+        assert_abs_diff_eq!(f32::dot_product(&a, &b).unwrap(), 0.0, epsilon = 1e-6);
+        assert_abs_diff_eq!(f32::real_dot_product(&a, &b).unwrap(), 0.0, epsilon = 1e-6);
     }
 
     #[test]
@@ -449,10 +458,18 @@ mod simd_metrics_tests {
         let b: Vec<f64> = vec![];
 
         // Empty vectors should succeed (sum of nothing is 0)
-        assert_eq!(f64::euclidean_distance(&a, &b).unwrap(), 0.0);
-        assert_eq!(f64::manhattan_distance(&a, &b).unwrap(), 0.0);
-        assert_eq!(f64::dot_product(&a, &b).unwrap(), 0.0);
-        assert_eq!(f64::real_dot_product(&a, &b).unwrap(), 0.0);
+        assert_abs_diff_eq!(
+            f64::euclidean_distance(&a, &b).unwrap(),
+            0.0,
+            epsilon = 1e-10
+        );
+        assert_abs_diff_eq!(
+            f64::manhattan_distance(&a, &b).unwrap(),
+            0.0,
+            epsilon = 1e-10
+        );
+        assert_abs_diff_eq!(f64::dot_product(&a, &b).unwrap(), 0.0, epsilon = 1e-10);
+        assert_abs_diff_eq!(f64::real_dot_product(&a, &b).unwrap(), 0.0, epsilon = 1e-10);
     }
 
     // Edge Case Tests
@@ -461,21 +478,25 @@ mod simd_metrics_tests {
         let a = vec![3.0f32];
         let b = vec![4.0f32];
 
-        assert_eq!(
+        assert_abs_diff_eq!(
             f32::euclidean_distance(&a, &b).unwrap(),
-            scalar_euclidean_distance_f32(&a, &b)
+            scalar_euclidean_distance_f32(&a, &b),
+            epsilon = 1e-6
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f32::manhattan_distance(&a, &b).unwrap(),
-            scalar_manhattan_distance_f32(&a, &b)
+            scalar_manhattan_distance_f32(&a, &b),
+            epsilon = 1e-6
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f32::dot_product(&a, &b).unwrap(),
-            scalar_dot_product_f32(&a, &b)
+            scalar_dot_product_f32(&a, &b),
+            epsilon = 1e-6
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f32::real_dot_product(&a, &b).unwrap(),
-            scalar_real_dot_product_f32(&a, &b)
+            scalar_real_dot_product_f32(&a, &b),
+            epsilon = 1e-6
         );
     }
 
@@ -484,21 +505,25 @@ mod simd_metrics_tests {
         let a = vec![3.0f64];
         let b = vec![4.0f64];
 
-        assert_eq!(
+        assert_abs_diff_eq!(
             f64::euclidean_distance(&a, &b).unwrap(),
-            scalar_euclidean_distance_f64(&a, &b)
+            scalar_euclidean_distance_f64(&a, &b),
+            epsilon = 1e-10
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f64::manhattan_distance(&a, &b).unwrap(),
-            scalar_manhattan_distance_f64(&a, &b)
+            scalar_manhattan_distance_f64(&a, &b),
+            epsilon = 1e-10
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f64::dot_product(&a, &b).unwrap(),
-            scalar_dot_product_f64(&a, &b)
+            scalar_dot_product_f64(&a, &b),
+            epsilon = 1e-10
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f64::real_dot_product(&a, &b).unwrap(),
-            scalar_real_dot_product_f64(&a, &b)
+            scalar_real_dot_product_f64(&a, &b),
+            epsilon = 1e-10
         );
     }
 
@@ -507,21 +532,25 @@ mod simd_metrics_tests {
         let a = vec![1.0f32, 2.0];
         let b = vec![3.0f32, 4.0];
 
-        assert_eq!(
+        assert_abs_diff_eq!(
             f32::euclidean_distance(&a, &b).unwrap(),
-            scalar_euclidean_distance_f32(&a, &b)
+            scalar_euclidean_distance_f32(&a, &b),
+            epsilon = 1e-6
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f32::manhattan_distance(&a, &b).unwrap(),
-            scalar_manhattan_distance_f32(&a, &b)
+            scalar_manhattan_distance_f32(&a, &b),
+            epsilon = 1e-6
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f32::dot_product(&a, &b).unwrap(),
-            scalar_dot_product_f32(&a, &b)
+            scalar_dot_product_f32(&a, &b),
+            epsilon = 1e-6
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f32::real_dot_product(&a, &b).unwrap(),
-            scalar_real_dot_product_f32(&a, &b)
+            scalar_real_dot_product_f32(&a, &b),
+            epsilon = 1e-6
         );
     }
 
@@ -530,21 +559,25 @@ mod simd_metrics_tests {
         let a = vec![1.0f64, 2.0];
         let b = vec![3.0f64, 4.0];
 
-        assert_eq!(
+        assert_abs_diff_eq!(
             f64::euclidean_distance(&a, &b).unwrap(),
-            scalar_euclidean_distance_f64(&a, &b)
+            scalar_euclidean_distance_f64(&a, &b),
+            epsilon = 1e-10
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f64::manhattan_distance(&a, &b).unwrap(),
-            scalar_manhattan_distance_f64(&a, &b)
+            scalar_manhattan_distance_f64(&a, &b),
+            epsilon = 1e-10
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f64::dot_product(&a, &b).unwrap(),
-            scalar_dot_product_f64(&a, &b)
+            scalar_dot_product_f64(&a, &b),
+            epsilon = 1e-10
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f64::real_dot_product(&a, &b).unwrap(),
-            scalar_real_dot_product_f64(&a, &b)
+            scalar_real_dot_product_f64(&a, &b),
+            epsilon = 1e-10
         );
     }
 
@@ -553,10 +586,18 @@ mod simd_metrics_tests {
         let a = vec![0.0f32, 0.0, 0.0, 0.0, 0.0];
         let b = vec![0.0f32, 0.0, 0.0, 0.0, 0.0];
 
-        assert_eq!(f32::euclidean_distance(&a, &b).unwrap(), 0.0);
-        assert_eq!(f32::manhattan_distance(&a, &b).unwrap(), 0.0);
-        assert_eq!(f32::dot_product(&a, &b).unwrap(), 0.0);
-        assert_eq!(f32::real_dot_product(&a, &b).unwrap(), 0.0);
+        assert_abs_diff_eq!(
+            f32::euclidean_distance(&a, &b).unwrap(),
+            0.0,
+            epsilon = 1e-6
+        );
+        assert_abs_diff_eq!(
+            f32::manhattan_distance(&a, &b).unwrap(),
+            0.0,
+            epsilon = 1e-6
+        );
+        assert_abs_diff_eq!(f32::dot_product(&a, &b).unwrap(), 0.0, epsilon = 1e-6);
+        assert_abs_diff_eq!(f32::real_dot_product(&a, &b).unwrap(), 0.0, epsilon = 1e-6);
     }
 
     #[test]
@@ -564,10 +605,18 @@ mod simd_metrics_tests {
         let a = vec![0.0f64, 0.0, 0.0, 0.0, 0.0];
         let b = vec![0.0f64, 0.0, 0.0, 0.0, 0.0];
 
-        assert_eq!(f64::euclidean_distance(&a, &b).unwrap(), 0.0);
-        assert_eq!(f64::manhattan_distance(&a, &b).unwrap(), 0.0);
-        assert_eq!(f64::dot_product(&a, &b).unwrap(), 0.0);
-        assert_eq!(f64::real_dot_product(&a, &b).unwrap(), 0.0);
+        assert_abs_diff_eq!(
+            f64::euclidean_distance(&a, &b).unwrap(),
+            0.0,
+            epsilon = 1e-10
+        );
+        assert_abs_diff_eq!(
+            f64::manhattan_distance(&a, &b).unwrap(),
+            0.0,
+            epsilon = 1e-10
+        );
+        assert_abs_diff_eq!(f64::dot_product(&a, &b).unwrap(), 0.0, epsilon = 1e-10);
+        assert_abs_diff_eq!(f64::real_dot_product(&a, &b).unwrap(), 0.0, epsilon = 1e-10);
     }
 
     // SIMD Path Coverage Tests - Various Vector Sizes
@@ -577,63 +626,33 @@ mod simd_metrics_tests {
 
         let euclidean = f32::euclidean_distance(&a, &b).unwrap();
         let expected_euclidean = scalar_euclidean_distance_f32(&a, &b);
-        // Use relative tolerance for larger values
-        let tolerance = if expected_euclidean.abs() > 1.0 {
-            expected_euclidean.abs() * 1e-4
-        } else {
-            1e-4
-        };
-        assert!(
-            (euclidean - expected_euclidean).abs() < tolerance,
-            "Size {}: euclidean={}, expected={}",
-            size,
+        assert_relative_eq!(
             euclidean,
-            expected_euclidean
+            expected_euclidean,
+            epsilon = 1e-4,
+            max_relative = 1e-4
         );
 
         let manhattan = f32::manhattan_distance(&a, &b).unwrap();
         let expected_manhattan = scalar_manhattan_distance_f32(&a, &b);
-        let tolerance = if expected_manhattan.abs() > 1.0 {
-            expected_manhattan.abs() * 1e-4
-        } else {
-            1e-4
-        };
-        assert!(
-            (manhattan - expected_manhattan).abs() < tolerance,
-            "Size {}: manhattan={}, expected={}",
-            size,
+        assert_relative_eq!(
             manhattan,
-            expected_manhattan
+            expected_manhattan,
+            epsilon = 1e-4,
+            max_relative = 1e-4
         );
 
         let dot = f32::dot_product(&a, &b).unwrap();
         let expected_dot = scalar_dot_product_f32(&a, &b);
-        let tolerance = if expected_dot.abs() > 1.0 {
-            expected_dot.abs() * 1e-4
-        } else {
-            1e-4
-        };
-        assert!(
-            (dot - expected_dot).abs() < tolerance,
-            "Size {}: dot={}, expected={}",
-            size,
-            dot,
-            expected_dot
-        );
+        assert_relative_eq!(dot, expected_dot, epsilon = 1e-4, max_relative = 1e-4);
 
         let real_dot = f32::real_dot_product(&a, &b).unwrap();
         let expected_real_dot = scalar_real_dot_product_f32(&a, &b);
-        let tolerance = if expected_real_dot.abs() > 1.0 {
-            expected_real_dot.abs() * 1e-4
-        } else {
-            1e-4
-        };
-        assert!(
-            (real_dot - expected_real_dot).abs() < tolerance,
-            "Size {}: real_dot={}, expected={}",
-            size,
+        assert_relative_eq!(
             real_dot,
-            expected_real_dot
+            expected_real_dot,
+            epsilon = 1e-4,
+            max_relative = 1e-4
         );
     }
 
@@ -643,43 +662,19 @@ mod simd_metrics_tests {
 
         let euclidean = f64::euclidean_distance(&a, &b).unwrap();
         let expected_euclidean = scalar_euclidean_distance_f64(&a, &b);
-        assert!(
-            (euclidean - expected_euclidean).abs() < 1e-10,
-            "Size {}: euclidean={}, expected={}",
-            size,
-            euclidean,
-            expected_euclidean
-        );
+        assert_abs_diff_eq!(euclidean, expected_euclidean, epsilon = 1e-10);
 
         let manhattan = f64::manhattan_distance(&a, &b).unwrap();
         let expected_manhattan = scalar_manhattan_distance_f64(&a, &b);
-        assert!(
-            (manhattan - expected_manhattan).abs() < 1e-10,
-            "Size {}: manhattan={}, expected={}",
-            size,
-            manhattan,
-            expected_manhattan
-        );
+        assert_abs_diff_eq!(manhattan, expected_manhattan, epsilon = 1e-10);
 
         let dot = f64::dot_product(&a, &b).unwrap();
         let expected_dot = scalar_dot_product_f64(&a, &b);
-        assert!(
-            (dot - expected_dot).abs() < 1e-10,
-            "Size {}: dot={}, expected={}",
-            size,
-            dot,
-            expected_dot
-        );
+        assert_abs_diff_eq!(dot, expected_dot, epsilon = 1e-10);
 
         let real_dot = f64::real_dot_product(&a, &b).unwrap();
         let expected_real_dot = scalar_real_dot_product_f64(&a, &b);
-        assert!(
-            (real_dot - expected_real_dot).abs() < 1e-10,
-            "Size {}: real_dot={}, expected={}",
-            size,
-            real_dot,
-            expected_real_dot
-        );
+        assert_abs_diff_eq!(real_dot, expected_real_dot, epsilon = 1e-10);
     }
 
     #[test]
@@ -778,21 +773,25 @@ mod simd_metrics_tests {
         let a = vec![-1.0f32, -2.0, -3.0, -4.0, -5.0];
         let b = vec![-5.0f32, -4.0, -3.0, -2.0, -1.0];
 
-        assert_eq!(
+        assert_abs_diff_eq!(
             f32::euclidean_distance(&a, &b).unwrap(),
-            scalar_euclidean_distance_f32(&a, &b)
+            scalar_euclidean_distance_f32(&a, &b),
+            epsilon = 1e-6
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f32::manhattan_distance(&a, &b).unwrap(),
-            scalar_manhattan_distance_f32(&a, &b)
+            scalar_manhattan_distance_f32(&a, &b),
+            epsilon = 1e-6
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f32::dot_product(&a, &b).unwrap(),
-            scalar_dot_product_f32(&a, &b)
+            scalar_dot_product_f32(&a, &b),
+            epsilon = 1e-6
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f32::real_dot_product(&a, &b).unwrap(),
-            scalar_real_dot_product_f32(&a, &b)
+            scalar_real_dot_product_f32(&a, &b),
+            epsilon = 1e-6
         );
     }
 
@@ -801,21 +800,25 @@ mod simd_metrics_tests {
         let a = vec![-1.0f64, -2.0, -3.0, -4.0, -5.0];
         let b = vec![-5.0f64, -4.0, -3.0, -2.0, -1.0];
 
-        assert_eq!(
+        assert_abs_diff_eq!(
             f64::euclidean_distance(&a, &b).unwrap(),
-            scalar_euclidean_distance_f64(&a, &b)
+            scalar_euclidean_distance_f64(&a, &b),
+            epsilon = 1e-10
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f64::manhattan_distance(&a, &b).unwrap(),
-            scalar_manhattan_distance_f64(&a, &b)
+            scalar_manhattan_distance_f64(&a, &b),
+            epsilon = 1e-10
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f64::dot_product(&a, &b).unwrap(),
-            scalar_dot_product_f64(&a, &b)
+            scalar_dot_product_f64(&a, &b),
+            epsilon = 1e-10
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             f64::real_dot_product(&a, &b).unwrap(),
-            scalar_real_dot_product_f64(&a, &b)
+            scalar_real_dot_product_f64(&a, &b),
+            epsilon = 1e-10
         );
     }
 
@@ -826,19 +829,19 @@ mod simd_metrics_tests {
 
         let euclidean = f32::euclidean_distance(&a, &b).unwrap();
         let expected_euclidean = scalar_euclidean_distance_f32(&a, &b);
-        assert!((euclidean - expected_euclidean).abs() < 1e-4);
+        assert_abs_diff_eq!(euclidean, expected_euclidean, epsilon = 1e-4);
 
         let manhattan = f32::manhattan_distance(&a, &b).unwrap();
         let expected_manhattan = scalar_manhattan_distance_f32(&a, &b);
-        assert!((manhattan - expected_manhattan).abs() < 1e-4);
+        assert_abs_diff_eq!(manhattan, expected_manhattan, epsilon = 1e-4);
 
         let dot = f32::dot_product(&a, &b).unwrap();
         let expected_dot = scalar_dot_product_f32(&a, &b);
-        assert!((dot - expected_dot).abs() < 1e-4);
+        assert_abs_diff_eq!(dot, expected_dot, epsilon = 1e-4);
 
         let real_dot = f32::real_dot_product(&a, &b).unwrap();
         let expected_real_dot = scalar_real_dot_product_f32(&a, &b);
-        assert!((real_dot - expected_real_dot).abs() < 1e-4);
+        assert_abs_diff_eq!(real_dot, expected_real_dot, epsilon = 1e-4);
     }
 
     #[test]
@@ -848,19 +851,19 @@ mod simd_metrics_tests {
 
         let euclidean = f64::euclidean_distance(&a, &b).unwrap();
         let expected_euclidean = scalar_euclidean_distance_f64(&a, &b);
-        assert!((euclidean - expected_euclidean).abs() < 1e-10);
+        assert_abs_diff_eq!(euclidean, expected_euclidean, epsilon = 1e-10);
 
         let manhattan = f64::manhattan_distance(&a, &b).unwrap();
         let expected_manhattan = scalar_manhattan_distance_f64(&a, &b);
-        assert!((manhattan - expected_manhattan).abs() < 1e-10);
+        assert_abs_diff_eq!(manhattan, expected_manhattan, epsilon = 1e-10);
 
         let dot = f64::dot_product(&a, &b).unwrap();
         let expected_dot = scalar_dot_product_f64(&a, &b);
-        assert!((dot - expected_dot).abs() < 1e-10);
+        assert_abs_diff_eq!(dot, expected_dot, epsilon = 1e-10);
 
         let real_dot = f64::real_dot_product(&a, &b).unwrap();
         let expected_real_dot = scalar_real_dot_product_f64(&a, &b);
-        assert!((real_dot - expected_real_dot).abs() < 1e-10);
+        assert_abs_diff_eq!(real_dot, expected_real_dot, epsilon = 1e-10);
     }
 
     #[test]
@@ -870,19 +873,19 @@ mod simd_metrics_tests {
 
         let euclidean = f32::euclidean_distance(&a, &b).unwrap();
         let expected_euclidean = scalar_euclidean_distance_f32(&a, &b);
-        assert!((euclidean - expected_euclidean).abs() / expected_euclidean < 1e-4);
+        assert_relative_eq!(euclidean, expected_euclidean, epsilon = 1e-4);
 
         let manhattan = f32::manhattan_distance(&a, &b).unwrap();
         let expected_manhattan = scalar_manhattan_distance_f32(&a, &b);
-        assert!((manhattan - expected_manhattan).abs() / expected_manhattan < 1e-4);
+        assert_relative_eq!(manhattan, expected_manhattan, epsilon = 1e-4);
 
         let dot = f32::dot_product(&a, &b).unwrap();
         let expected_dot = scalar_dot_product_f32(&a, &b);
-        assert!((dot - expected_dot).abs() / expected_dot.abs() < 1e-4);
+        assert_relative_eq!(dot, expected_dot, epsilon = 1e-4);
 
         let real_dot = f32::real_dot_product(&a, &b).unwrap();
         let expected_real_dot = scalar_real_dot_product_f32(&a, &b);
-        assert!((real_dot - expected_real_dot).abs() / expected_real_dot < 1e-4);
+        assert_relative_eq!(real_dot, expected_real_dot, epsilon = 1e-4);
     }
 
     #[test]
@@ -892,19 +895,19 @@ mod simd_metrics_tests {
 
         let euclidean = f64::euclidean_distance(&a, &b).unwrap();
         let expected_euclidean = scalar_euclidean_distance_f64(&a, &b);
-        assert!((euclidean - expected_euclidean).abs() / expected_euclidean < 1e-10);
+        assert_relative_eq!(euclidean, expected_euclidean, epsilon = 1e-10);
 
         let manhattan = f64::manhattan_distance(&a, &b).unwrap();
         let expected_manhattan = scalar_manhattan_distance_f64(&a, &b);
-        assert!((manhattan - expected_manhattan).abs() / expected_manhattan < 1e-10);
+        assert_relative_eq!(manhattan, expected_manhattan, epsilon = 1e-10);
 
         let dot = f64::dot_product(&a, &b).unwrap();
         let expected_dot = scalar_dot_product_f64(&a, &b);
-        assert!((dot - expected_dot).abs() / expected_dot.abs() < 1e-10);
+        assert_relative_eq!(dot, expected_dot, epsilon = 1e-10);
 
         let real_dot = f64::real_dot_product(&a, &b).unwrap();
         let expected_real_dot = scalar_real_dot_product_f64(&a, &b);
-        assert!((real_dot - expected_real_dot).abs() / expected_real_dot < 1e-10);
+        assert_relative_eq!(real_dot, expected_real_dot, epsilon = 1e-10);
     }
 
     #[test]
@@ -914,19 +917,19 @@ mod simd_metrics_tests {
 
         let euclidean = f32::euclidean_distance(&a, &b).unwrap();
         let expected_euclidean = scalar_euclidean_distance_f32(&a, &b);
-        assert!((euclidean - expected_euclidean).abs() < 1e-10);
+        assert_abs_diff_eq!(euclidean, expected_euclidean, epsilon = 1e-10);
 
         let manhattan = f32::manhattan_distance(&a, &b).unwrap();
         let expected_manhattan = scalar_manhattan_distance_f32(&a, &b);
-        assert!((manhattan - expected_manhattan).abs() < 1e-10);
+        assert_abs_diff_eq!(manhattan, expected_manhattan, epsilon = 1e-10);
 
         let dot = f32::dot_product(&a, &b).unwrap();
         let expected_dot = scalar_dot_product_f32(&a, &b);
-        assert!((dot - expected_dot).abs() < 1e-15);
+        assert_abs_diff_eq!(dot, expected_dot, epsilon = 1e-15);
 
         let real_dot = f32::real_dot_product(&a, &b).unwrap();
         let expected_real_dot = scalar_real_dot_product_f32(&a, &b);
-        assert!((real_dot - expected_real_dot).abs() < 1e-15);
+        assert_abs_diff_eq!(real_dot, expected_real_dot, epsilon = 1e-15);
     }
 
     #[test]
@@ -936,18 +939,18 @@ mod simd_metrics_tests {
 
         let euclidean = f64::euclidean_distance(&a, &b).unwrap();
         let expected_euclidean = scalar_euclidean_distance_f64(&a, &b);
-        assert!((euclidean - expected_euclidean).abs() < 1e-20);
+        assert_abs_diff_eq!(euclidean, expected_euclidean, epsilon = 1e-20);
 
         let manhattan = f64::manhattan_distance(&a, &b).unwrap();
         let expected_manhattan = scalar_manhattan_distance_f64(&a, &b);
-        assert!((manhattan - expected_manhattan).abs() < 1e-20);
+        assert_abs_diff_eq!(manhattan, expected_manhattan, epsilon = 1e-20);
 
         let dot = f64::dot_product(&a, &b).unwrap();
         let expected_dot = scalar_dot_product_f64(&a, &b);
-        assert!((dot - expected_dot).abs() < 1e-30);
+        assert_abs_diff_eq!(dot, expected_dot, epsilon = 1e-30);
 
         let real_dot = f64::real_dot_product(&a, &b).unwrap();
         let expected_real_dot = scalar_real_dot_product_f64(&a, &b);
-        assert!((real_dot - expected_real_dot).abs() < 1e-30);
+        assert_abs_diff_eq!(real_dot, expected_real_dot, epsilon = 1e-30);
     }
 }

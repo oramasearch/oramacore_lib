@@ -49,6 +49,7 @@ pulp = "0.21.5"
 tempfile = { version = "3" }
 criterion = { version = "0.5.1", features = ["async_tokio"] }
 rallo = { version = "0.5" }
+approx = "0.5.1"
 
 [features]
 no_thread = []
