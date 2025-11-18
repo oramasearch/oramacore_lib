@@ -124,6 +124,32 @@ impl PinRulesWriter {
             .cloned()
             .collect()
     }
+
+    pub fn get_by_id(&self, rule_id: &str) -> Option<&PinRule<String>> {
+        let rules = self.list_pin_rules();
+        rules.iter().find(|r| r.id == rule_id)
+    }
+
+    pub fn get_matching_rules_ids<'a, 's, 'd>(
+        &'s self,
+        doc_id_str: &'d str,
+    ) -> impl Iterator<Item = String> + 'a
+    where
+        's: 'a,
+        'd: 'a,
+    {
+        let rules = self.list_pin_rules();
+
+        rules
+            .iter()
+            .filter(move |rule| {
+                rule.consequence
+                    .promote
+                    .iter()
+                    .any(|p| p.doc_id == doc_id_str)
+            })
+            .map(|rule| rule.id.clone())
+    }
 }
 
 #[cfg(test)]
