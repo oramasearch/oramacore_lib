@@ -146,6 +146,13 @@ impl<E: FloatElement, T: IdxType> Node<E, T> {
         self.idx.map(|id| (self.vectors, id))
     }
 
+    pub fn data(&self) -> Option<(&[E], T)> {
+        match self.idx.as_ref() {
+            Some(id) => Some((self.vectors.as_ref(), id.clone())),
+            None => None,
+        }
+    }
+
     // return internal embeddings
     pub fn vectors(&self) -> &Vec<E> {
         &self.vectors

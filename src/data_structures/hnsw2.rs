@@ -84,6 +84,10 @@ impl<
         self.dim
     }
 
+    pub fn get_data(&self) -> impl Iterator<Item = (DocumentId, &[f32])> + '_ {
+        self.inner.data().map(|(v, DocumentIdWrapper(id))| (id, v))
+    }
+
     pub fn into_data(self) -> impl Iterator<Item = (DocumentId, Vec<f32>)> {
         self.inner
             .into_data()
@@ -111,7 +115,7 @@ impl<
     pub fn search(&self, target: &[f32], limit: usize) -> Vec<(DocumentId, f32)> {
         assert_eq!(target.len(), self.dim);
 
-        let v = self.inner.node_search_k(&Node::new(&target), limit);
+        let v = self.inner.node_search_k(&Node::new(target), limit);
 
         let mut result = Vec::new();
         for (node, _) in v {

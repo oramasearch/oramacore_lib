@@ -5,7 +5,7 @@ use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct BasicIndex3<DocumentId: Debug + Clone + Serialize> {
+pub struct VectorBruteForce<DocumentId: Debug + Clone + Serialize> {
     dim: usize,
     data: Vec<(DocumentId, Box<[f32]>, f32)>, // (id, vector, magnitude)
 }
@@ -19,7 +19,9 @@ fn real_cosine_similarity(
     Ok(a / (magnitude_vec1.sqrt() * magnitude_vec2.sqrt()))
 }
 
-impl<DocumentId: Debug + Clone + Copy + Serialize + Ord + Send + Sync> BasicIndex3<DocumentId> {
+impl<DocumentId: Debug + Clone + Copy + Serialize + Ord + Send + Sync>
+    VectorBruteForce<DocumentId>
+{
     pub fn new(dim: usize) -> Self {
         Self {
             dim,
@@ -39,6 +41,12 @@ impl<DocumentId: Debug + Clone + Copy + Serialize + Ord + Send + Sync> BasicInde
         self.len() == 0
     }
 
+    pub fn get_data(&self) -> impl Iterator<Item = (DocumentId, &[f32])> + '_ {
+        self.data
+            .iter()
+            .map(|(id, vec_box, _)| (*id, vec_box.as_ref()))
+    }
+
     pub fn into_data(self) -> impl Iterator<Item = (DocumentId, Vec<f32>)> {
         self.data
             .into_iter()
@@ -56,44 +64,51 @@ impl<DocumentId: Debug + Clone + Copy + Serialize + Ord + Send + Sync> BasicInde
         let half_data_len = self.data.len() / 2;
         let (first_half, second_half) = self.data.split_at(half_data_len);
 
-        let (capped_head_one, capped_head_two) = rayon::join(|| {
-            let mut capped_head_one = CappedHeap::new(limit);
+        let (capped_head_one, capped_head_two) = rayon::join(
+            || {
+                let mut capped_head_one = CappedHeap::new(limit);
 
-            for (id, vec, magnitude) in first_half {
-                // The cosine similarity isnt a distance in the math sense
-                // https://en.wikipedia.org/wiki/Distance#Mathematical_formalization
-                // Anyway, it is good for ranking purposes
-                // 1 means the vectors are equal
-                // 0 means the vectors are orthogonal
-                let score = real_cosine_similarity((vec, *magnitude), (target, target_magnitude))
-                    .expect("real_cosine_similarity should not return an error");
+                for (id, vec, magnitude) in first_half {
+                    // The cosine similarity isnt a distance in the math sense
+                    // https://en.wikipedia.org/wiki/Distance#Mathematical_formalization
+                    // Anyway, it is good for ranking purposes
+                    // 1 means the vectors are equal
+                    // 0 means the vectors are orthogonal
+                    let score =
+                        real_cosine_similarity((vec, *magnitude), (target, target_magnitude))
+                            .expect("real_cosine_similarity should not return an error");
 
-                capped_head_one.insert(*id, OrderedFloat(score));
-            }
-            capped_head_one
-        }, || {
-            let mut capped_head_two = CappedHeap::new(limit);
+                    capped_head_one.insert(*id, OrderedFloat(score));
+                }
+                capped_head_one
+            },
+            || {
+                let mut capped_head_two = CappedHeap::new(limit);
 
-            for (id, vec, magnitude) in second_half {
-                // The cosine similarity isnt a distance in the math sense
-                // https://en.wikipedia.org/wiki/Distance#Mathematical_formalization
-                // Anyway, it is good for ranking purposes
-                // 1 means the vectors are equal
-                // 0 means the vectors are orthogonal
-                let score = real_cosine_similarity((vec, *magnitude), (target, target_magnitude))
-                    .expect("real_cosine_similarity should not return an error");
+                for (id, vec, magnitude) in second_half {
+                    // The cosine similarity isnt a distance in the math sense
+                    // https://en.wikipedia.org/wiki/Distance#Mathematical_formalization
+                    // Anyway, it is good for ranking purposes
+                    // 1 means the vectors are equal
+                    // 0 means the vectors are orthogonal
+                    let score =
+                        real_cosine_similarity((vec, *magnitude), (target, target_magnitude))
+                            .expect("real_cosine_similarity should not return an error");
 
-                capped_head_two.insert(*id, OrderedFloat(score));
-            }
-            capped_head_two
-        });
+                    capped_head_two.insert(*id, OrderedFloat(score));
+                }
+                capped_head_two
+            },
+        );
 
         let mut output: Vec<_> = capped_head_one
             .into_top()
             .map(|(id, OrderedFloat(score))| (id, score))
-            .chain(capped_head_two
-            .into_top()
-            .map(|(id, OrderedFloat(score))| (id, score)))
+            .chain(
+                capped_head_two
+                    .into_top()
+                    .map(|(id, OrderedFloat(score))| (id, score)),
+            )
             .collect();
 
         output.sort_by_key(|(_, score)| Reverse(OrderedFloat(*score)));
@@ -113,7 +128,7 @@ mod tests {
     fn test_basic3_index() {
         let dim = 3;
 
-        let mut index = BasicIndex3::new(dim);
+        let mut index = VectorBruteForce::new(dim);
 
         let points = [
             vec![255.0, 0.0, 0.0],
@@ -147,13 +162,13 @@ mod tests {
                     .collect::<Vec<f32>>()
             })
             .collect::<Vec<Vec<f32>>>();
-        let mut index = BasicIndex3::new(dimension);
+        let mut index = VectorBruteForce::new(dimension);
         for (i, sample) in samples.into_iter().enumerate() {
             index.add_owned(sample.clone(), i);
         }
 
         let decoded = bincode::serialize(&index).unwrap();
-        let new_index: BasicIndex3<usize> = bincode::deserialize(&decoded).unwrap();
+        let new_index: VectorBruteForce<usize> = bincode::deserialize(&decoded).unwrap();
 
         let target = (0..dimension)
             .map(|_| normal.sample(&mut rand::rng()))

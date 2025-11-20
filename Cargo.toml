@@ -63,7 +63,3 @@ harness = false
 [[bench]]
 name = "hnsw"
 harness = false
-
-[[bench]]
-name = "hnsw_vs_basic"
-harness = false

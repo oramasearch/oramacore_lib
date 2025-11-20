@@ -89,6 +89,10 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
         self.len() == 0
     }
 
+    pub fn data(&self) -> impl Iterator<Item = (&[E], T)> {
+        self._nodes.iter().filter_map(|node| node.data())
+    }
+
     pub fn into_data(self) -> impl Iterator<Item = (Vec<E>, T)> {
         self._nodes.into_iter().filter_map(|node| node.into_data())
     }
