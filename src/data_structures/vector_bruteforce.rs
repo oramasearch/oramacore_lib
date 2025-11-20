@@ -53,6 +53,13 @@ impl<DocumentId: Debug + Clone + Copy + Serialize + Ord + Send + Sync>
             .map(|(id, vec_box, _)| (id, vec_box.into_vec()))
     }
 
+    pub fn set_capacity(&mut self, capacity: usize) {
+        if self.data.len() >= capacity {
+            return;
+        }
+        self.data.reserve_exact(capacity - self.data.len());
+    }
+
     pub fn add_owned(&mut self, point: Vec<f32>, id: DocumentId) {
         let magnitude = f32::real_dot_product(&point, &point).unwrap();
         self.data.push((id, point.into_boxed_slice(), magnitude));
