@@ -1,3 +1,6 @@
+pub mod basic;
+pub mod basic2;
+pub mod capped_heap;
 pub mod fst;
 pub mod hnsw;
 pub mod hnsw2;

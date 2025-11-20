@@ -108,7 +108,7 @@ impl<
             .map_err(|e| anyhow::anyhow!(e))
     }
 
-    pub fn search(&self, target: Vec<f32>, limit: usize) -> Vec<(DocumentId, f32)> {
+    pub fn search(&self, target: &[f32], limit: usize) -> Vec<(DocumentId, f32)> {
         assert_eq!(target.len(), self.dim);
 
         let v = self.inner.node_search_k(&Node::new(&target), limit);
@@ -122,7 +122,7 @@ impl<
             // Anyway, it is good for ranking purposes
             // 1 means the vectors are equal
             // 0 means the vectors are orthogonal
-            let score = real_cosine_similarity(n, &target)
+            let score = real_cosine_similarity(n, target)
                 .expect("real_cosine_similarity should not return an error");
 
             let id = match node.idx() {
@@ -159,7 +159,7 @@ mod tests {
         index.build().unwrap();
 
         let target = vec![255.0, 0.0, 0.0];
-        let v = index.search(target, 10);
+        let v = index.search(&target, 10);
 
         let res: HashMap<_, _> = v.into_iter().collect();
 
@@ -192,8 +192,8 @@ mod tests {
             .map(|_| normal.sample(&mut rand::rng()))
             .collect::<Vec<f32>>();
 
-        let v1 = index.search(target.clone(), 10);
-        let v2 = new_index.search(target.clone(), 10);
+        let v1 = index.search(&target, 10);
+        let v2 = new_index.search(&target, 10);
 
         assert_eq!(v1, v2);
     }
