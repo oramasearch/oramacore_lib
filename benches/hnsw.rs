@@ -85,7 +85,7 @@ pub fn hnsw(c: &mut Criterion) {
     c.bench_function("search hnsw2", |b| {
         let index = build_hnsw2(DIM, data.clone());
         b.iter(|| {
-            let _ = index.search(black_box(data[0].clone()), 10);
+            let _ = index.search(black_box(&data[0]), 10);
         });
     });
 }
