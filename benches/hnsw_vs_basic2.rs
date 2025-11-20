@@ -3,6 +3,7 @@ use criterion::{black_box, criterion_group, criterion_main};
 
 use oramacore_lib::data_structures::basic::BasicIndex;
 use oramacore_lib::data_structures::basic2::BasicIndex2;
+use oramacore_lib::data_structures::basic3::BasicIndex3;
 use rand::distr::{Distribution, Uniform};
 
 fn generate_sample(dim: usize, n: usize) -> Vec<Vec<f32>> {
@@ -29,6 +30,15 @@ fn build_basic2(dim: usize, data: Vec<Vec<f32>>) -> BasicIndex2<u64> {
     let mut index = BasicIndex2::new(dim);
     for (i, sample) in data.into_iter().enumerate() {
         index.add_owned(&sample, i as u64);
+    }
+
+    index
+}
+
+fn build_basic3(dim: usize, data: Vec<Vec<f32>>) -> BasicIndex3<u64> {
+    let mut index = BasicIndex3::new(dim);
+    for (i, sample) in data.into_iter().enumerate() {
+        index.add_owned(sample, i as u64);
     }
 
     index
@@ -69,6 +79,12 @@ pub fn hnsw_vs_basic2(c: &mut Criterion) {
                 let _ = build_basic2(dim, black_box(points2.clone()));
             });
         });
+        let id = format!("hnsw_vs_basic2 - basic3 - build dim={} n={}", dim, n);
+        c.bench_function(&id, |b| {
+            b.iter(|| {
+                let _ = build_basic3(dim, black_box(points2.clone()));
+            });
+        });
         let id = format!("hnsw_vs_basic2 - basic - search dim={} n={}", dim, n);
         c.bench_function(&id, |b| {
             let index = build_basic(dim, points2.clone());
@@ -79,6 +95,13 @@ pub fn hnsw_vs_basic2(c: &mut Criterion) {
         let id = format!("hnsw_vs_basic2 - basic2 - search dim={} n={}", dim, n);
         c.bench_function(&id, |b| {
             let index = build_basic2(dim, points2.clone());
+            b.iter(|| {
+                let _ = index.search(black_box(&points2[0]), 10);
+            });
+        });
+        let id = format!("hnsw_vs_basic2 - basic3 - search dim={} n={}", dim, n);
+        c.bench_function(&id, |b| {
+            let index = build_basic3(dim, points2.clone());
             b.iter(|| {
                 let _ = index.search(black_box(&points2[0]), 10);
             });
