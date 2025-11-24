@@ -103,6 +103,10 @@ impl<T: Copy + PartialOrd + Debug, D: Debug> BKDTree<T, D> {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn insert(&mut self, point: Point<T, D>)
     where
         T: num_traits::Float,
