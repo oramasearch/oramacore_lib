@@ -1,6 +1,9 @@
 use std::{cmp::Reverse, fmt::Debug};
 
-use crate::{data_structures::capped_heap::CappedHeap, hnsw2::core::simd_metrics::SIMDOptmized};
+use crate::{
+    data_structures::{ShouldInclude, capped_heap::CappedHeap},
+    hnsw2::core::simd_metrics::SIMDOptmized,
+};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
@@ -65,7 +68,13 @@ impl<DocumentId: Debug + Clone + Copy + Serialize + Ord + Send + Sync>
         self.data.push((id, point.into_boxed_slice(), magnitude));
     }
 
-    pub fn search(&self, target: &[f32], limit: usize) -> Vec<(DocumentId, f32)> {
+    pub fn search(
+        &self,
+        target: &[f32],
+        limit: usize,
+        similarity: f32,
+        should_include: &impl ShouldInclude<DocumentId>,
+    ) -> Vec<(DocumentId, f32)> {
         let target_magnitude = f32::real_dot_product(target, target).unwrap();
 
         let half_data_len = self.data.len() / 2;
@@ -73,38 +82,24 @@ impl<DocumentId: Debug + Clone + Copy + Serialize + Ord + Send + Sync>
 
         let (capped_head_one, capped_head_two) = rayon::join(
             || {
-                let mut capped_head_one = CappedHeap::new(limit);
-
-                for (id, vec, magnitude) in first_half {
-                    // The cosine similarity isnt a distance in the math sense
-                    // https://en.wikipedia.org/wiki/Distance#Mathematical_formalization
-                    // Anyway, it is good for ranking purposes
-                    // 1 means the vectors are equal
-                    // 0 means the vectors are orthogonal
-                    let score =
-                        real_cosine_similarity((vec, *magnitude), (target, target_magnitude))
-                            .expect("real_cosine_similarity should not return an error");
-
-                    capped_head_one.insert(*id, OrderedFloat(score));
-                }
-                capped_head_one
+                search_on(
+                    target,
+                    target_magnitude,
+                    first_half,
+                    limit,
+                    similarity,
+                    should_include,
+                )
             },
             || {
-                let mut capped_head_two = CappedHeap::new(limit);
-
-                for (id, vec, magnitude) in second_half {
-                    // The cosine similarity isnt a distance in the math sense
-                    // https://en.wikipedia.org/wiki/Distance#Mathematical_formalization
-                    // Anyway, it is good for ranking purposes
-                    // 1 means the vectors are equal
-                    // 0 means the vectors are orthogonal
-                    let score =
-                        real_cosine_similarity((vec, *magnitude), (target, target_magnitude))
-                            .expect("real_cosine_similarity should not return an error");
-
-                    capped_head_two.insert(*id, OrderedFloat(score));
-                }
-                capped_head_two
+                search_on(
+                    target,
+                    target_magnitude,
+                    second_half,
+                    limit,
+                    similarity,
+                    should_include,
+                )
             },
         );
 
@@ -123,6 +118,33 @@ impl<DocumentId: Debug + Clone + Copy + Serialize + Ord + Send + Sync>
     }
 }
 
+fn search_on<DocumentId: Clone + Copy + Ord>(
+    target: &[f32],
+    target_magnitude: f32,
+    data: &[(DocumentId, Box<[f32]>, f32)],
+    limit: usize,
+    similarity: f32,
+    should_include: &impl ShouldInclude<DocumentId>,
+) -> CappedHeap<DocumentId, OrderedFloat<f32>> {
+    let mut capped_head_two = CappedHeap::new(limit);
+
+    for (id, vec, magnitude) in data {
+        if should_include.should_exclude(id) {
+            continue;
+        }
+
+        let score = real_cosine_similarity((vec, *magnitude), (target, target_magnitude))
+            .expect("real_cosine_similarity should not return an error");
+
+        if score < similarity {
+            continue;
+        }
+
+        capped_head_two.insert(*id, OrderedFloat(score));
+    }
+    capped_head_two
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -130,6 +152,12 @@ mod tests {
     use rand::distr::{Distribution, Uniform};
 
     use super::*;
+
+    impl ShouldInclude<usize> for () {
+        fn should_include(&self, _doc_id: &usize) -> bool {
+            true
+        }
+    }
 
     #[test]
     fn test_basic3_index() {
@@ -149,7 +177,7 @@ mod tests {
         }
 
         let target = vec![255.0, 0.0, 0.0];
-        let v = index.search(&target, 10);
+        let v = index.search(&target, 10, 0.0, &());
 
         let res: HashMap<_, _> = v.into_iter().collect();
 
@@ -181,8 +209,8 @@ mod tests {
             .map(|_| normal.sample(&mut rand::rng()))
             .collect::<Vec<f32>>();
 
-        let v1 = index.search(&target, 10);
-        let v2 = new_index.search(&target, 10);
+        let v1 = index.search(&target, 10, 0.0, &());
+        let v2 = new_index.search(&target, 10, 0.0, &());
 
         assert_eq!(v1, v2);
     }
