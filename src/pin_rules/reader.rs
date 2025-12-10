@@ -95,9 +95,18 @@ impl<DocumentId: Serialize + DeserializeOwned + Debug + Clone> PinRulesReader<Do
     pub fn apply(&self, term: &str) -> Vec<Consequence<DocumentId>> {
         let mut results = Vec::new();
         for rule in &self.rules {
+            // Only one pin rule needs to be satisfied to return the consequences
             for c in &rule.conditions {
                 match c {
-                    Condition::Is { pattern } if pattern == term => {
+                    Condition::Is { pattern } if term == pattern => {
+                        results.push(rule.consequence.clone());
+                        break;
+                    }
+                    Condition::StartsWith { pattern } if term.starts_with(pattern) => {
+                        results.push(rule.consequence.clone());
+                        break;
+                    }
+                    Condition::Contains { pattern } if term.contains(pattern) => {
                         results.push(rule.consequence.clone());
                         break;
                     }
@@ -128,7 +137,7 @@ mod pin_rules_tests {
     }
 
     #[test]
-    fn test_apply_pin_rules() {
+    fn test_commit_pin_rules() {
         let base_dir = generate_new_path();
         let mut reader: PinRulesReader<usize> = PinRulesReader::empty();
 
@@ -188,5 +197,54 @@ mod pin_rules_tests {
 
         let consequences = reader.apply("test");
         assert_eq!(consequences.len(), 0);
+    }
+
+    #[test]
+    fn test_check_pin_rules() {
+        let mut reader: PinRulesReader<usize> = PinRulesReader::empty();
+
+        reader
+            .update(PinRuleOperation::Insert(PinRule {
+                id: "test-rules".to_string(),
+                conditions: vec![
+                    Condition::Is {
+                        pattern: "test_is".to_string(),
+                    },
+                    Condition::StartsWith {
+                        pattern: "test_start_with".to_string(),
+                    },
+                    Condition::Contains {
+                        pattern: "test_contains".to_string(),
+                    },
+                ],
+                consequence: Consequence {
+                    promote: vec![PromoteItem {
+                        doc_id: 1,
+                        position: 1,
+                    }],
+                },
+            }))
+            .expect("Failed to insert rule");
+
+        let consequences = reader.apply("term");
+        assert_eq!(consequences.len(), 0);
+
+        let consequences = reader.apply("test_is");
+        assert_eq!(consequences.len(), 1);
+        assert_eq!(consequences[0].promote.len(), 1);
+        assert_eq!(consequences[0].promote[0].doc_id, 1);
+        assert_eq!(consequences[0].promote[0].position, 1);
+
+        let consequences = reader.apply("test_start_with_this_term");
+        assert_eq!(consequences.len(), 1);
+        assert_eq!(consequences[0].promote.len(), 1);
+        assert_eq!(consequences[0].promote[0].doc_id, 1);
+        assert_eq!(consequences[0].promote[0].position, 1);
+
+        let consequences = reader.apply("random_test_contains_text");
+        assert_eq!(consequences.len(), 1);
+        assert_eq!(consequences[0].promote.len(), 1);
+        assert_eq!(consequences[0].promote[0].doc_id, 1);
+        assert_eq!(consequences[0].promote[0].position, 1);
     }
 }

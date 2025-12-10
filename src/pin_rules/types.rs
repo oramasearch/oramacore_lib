@@ -74,6 +74,8 @@ impl TryFrom<serde_json::Value> for PinRule<String> {
 #[cfg_attr(test, derive(PartialEq))]
 pub enum Condition {
     Is { pattern: String },
+    StartsWith { pattern: String },
+    Contains { pattern: String },
 }
 
 /// Required for the bincode deserialization
@@ -95,6 +97,14 @@ impl Serialize for Condition {
                 anchoring: "is".to_string(),
                 pattern: Some(pattern.clone()),
             },
+            Condition::StartsWith { pattern } => SerdeCondition {
+                anchoring: "startsWith".to_string(),
+                pattern: Some(pattern.clone()),
+            },
+            Condition::Contains { pattern } => SerdeCondition {
+                anchoring: "contains".to_string(),
+                pattern: Some(pattern.clone()),
+            },
         };
         c.serialize(serializer)
     }
@@ -111,6 +121,20 @@ impl<'de> Deserialize<'de> for Condition {
             "is" => {
                 if let Some(pattern) = c.pattern {
                     Ok(Condition::Is { pattern })
+                } else {
+                    Err(serde::de::Error::custom("Unexpected pattern"))
+                }
+            }
+            "startsWith" => {
+                if let Some(pattern) = c.pattern {
+                    Ok(Condition::StartsWith { pattern })
+                } else {
+                    Err(serde::de::Error::custom("Unexpected pattern"))
+                }
+            }
+            "contains" => {
+                if let Some(pattern) = c.pattern {
+                    Ok(Condition::Contains { pattern })
                 } else {
                     Err(serde::de::Error::custom("Unexpected pattern"))
                 }
@@ -143,46 +167,124 @@ pub struct PromoteItem<DocId> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_pin_rule_deserialization() {
-        let json = r#"{
-            "id": "promote-red-jacket",
-            "conditions": [
-                {
-                    "pattern": "red jacket",
-                    "anchoring": "is"
-                }
-            ],
-            "consequence": {
-                "promote": [
-                    {
-                        "doc_id": "JACKET42",
-                        "position": 1
-                    },
-                    {
-                        "doc_id": "PANTS77",
-                        "position": 2
-                    }
-                ]
-            }
-        }"#;
-
+    fn test_deserialization_logic(
+        json: &str,
+        expected_id: &str,
+        expected_condition: Condition,
+        expected_promote: Vec<PromoteItem<String>>,
+    ) {
         let pin_rule: PinRule<String> =
             serde_json::from_str(json).expect("Failed to deserialize JSON");
-
-        assert_eq!(pin_rule.id, "promote-red-jacket");
+        assert_eq!(pin_rule.id, expected_id);
         assert_eq!(pin_rule.conditions.len(), 1);
+        assert_eq!(pin_rule.conditions[0], expected_condition);
+        assert_eq!(pin_rule.consequence.promote, expected_promote);
+    }
 
-        match &pin_rule.conditions[0] {
-            Condition::Is { pattern } => {
-                assert_eq!(pattern, "red jacket");
-            }
-        }
+    #[test]
+    fn test_is_deserialization() {
+        let json = r#"{
+                "id": "promote-red-jacket",
+                "conditions": [ { "pattern": "red jacket", "anchoring": "is" } ],
+                "consequence": {
+                    "promote": [
+                        { "doc_id": "JACKET42", "position": 1 },
+                        { "doc_id": "PANTS77", "position": 2 }
+                    ]
+                }
+            }"#;
 
-        assert_eq!(pin_rule.consequence.promote.len(), 2);
-        assert_eq!(pin_rule.consequence.promote[0].doc_id, "JACKET42");
-        assert_eq!(pin_rule.consequence.promote[0].position, 1);
-        assert_eq!(pin_rule.consequence.promote[1].doc_id, "PANTS77");
-        assert_eq!(pin_rule.consequence.promote[1].position, 2);
+        test_deserialization_logic(
+            json,
+            "promote-red-jacket",
+            Condition::Is {
+                pattern: "red jacket".to_string(),
+            },
+            vec![
+                PromoteItem {
+                    doc_id: "JACKET42".to_string(),
+                    position: 1,
+                },
+                PromoteItem {
+                    doc_id: "PANTS77".to_string(),
+                    position: 2,
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn test_startswith_deserialization() {
+        let json = r#"{
+                "id": "promote-starts-with",
+                "conditions": [ { "pattern": "red", "anchoring": "startsWith" } ],
+                "consequence": { "promote": [ { "doc_id": "RED_ITEM1", "position": 1 } ] }
+            }"#;
+
+        test_deserialization_logic(
+            json,
+            "promote-starts-with",
+            Condition::StartsWith {
+                pattern: "red".to_string(),
+            },
+            vec![PromoteItem {
+                doc_id: "RED_ITEM1".to_string(),
+                position: 1,
+            }],
+        );
+    }
+
+    #[test]
+    fn test_contains_deserialization() {
+        let json = r#"{
+                "id": "promote-contains",
+                "conditions": [ { "pattern": "jacket", "anchoring": "contains" } ],
+                "consequence": {
+                    "promote": [
+                        { "doc_id": "JACKET_ITEM1", "position": 1 },
+                        { "doc_id": "JACKET_ITEM2", "position": 2 }
+                    ]
+                }
+            }"#;
+
+        test_deserialization_logic(
+            json,
+            "promote-contains",
+            Condition::Contains {
+                pattern: "jacket".to_string(),
+            },
+            vec![
+                PromoteItem {
+                    doc_id: "JACKET_ITEM1".to_string(),
+                    position: 1,
+                },
+                PromoteItem {
+                    doc_id: "JACKET_ITEM2".to_string(),
+                    position: 2,
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn test_condition_serialization_roundtrip() {
+        let conditions = vec![
+            Condition::Is {
+                pattern: "exact match".to_string(),
+            },
+            Condition::StartsWith {
+                pattern: "prefix".to_string(),
+            },
+            Condition::Contains {
+                pattern: "middle".to_string(),
+            },
+        ];
+
+        let serialized =
+            serde_json::to_string_pretty(&conditions).expect("Failed to serialize conditions");
+
+        let deserialized: Vec<Condition> =
+            serde_json::from_str(&serialized).expect("Failed to deserialize conditions");
+        assert_eq!(deserialized, conditions);
     }
 }
