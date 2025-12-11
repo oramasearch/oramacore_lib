@@ -123,6 +123,11 @@ impl TextParser {
         self.tokenizer.tokenize(input).collect()
     }
 
+    /// Tokenizes the input string and stems each token.
+    ///
+    /// The output is a `Vec` of tuples. Each tuple contains:
+    /// - The original token (`String`).
+    /// - A `Vec<String>` containing the stemmed version(s) of the token.
     pub fn tokenize_and_stem(&self, input: &str) -> Vec<(String, Vec<String>)> {
         self.tokenizer
             .tokenize(input)

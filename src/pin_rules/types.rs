@@ -1,8 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::future::Future;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PinRule<DocId> {
     pub id: String,
     pub conditions: Vec<Condition>,
@@ -70,12 +69,15 @@ impl TryFrom<serde_json::Value> for PinRule<String> {
     }
 }
 
-#[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Condition {
     Is { pattern: String },
     StartsWith { pattern: String },
     Contains { pattern: String },
+
+    IsStemmed { pattern: String },
+    StartsWithStemmed { pattern: String },
+    ContainsStemmed { pattern: String },
 }
 
 /// Required for the bincode deserialization
@@ -103,6 +105,18 @@ impl Serialize for Condition {
             },
             Condition::Contains { pattern } => SerdeCondition {
                 anchoring: "contains".to_string(),
+                pattern: Some(pattern.clone()),
+            },
+            Condition::IsStemmed { pattern } => SerdeCondition {
+                anchoring: "isStemmed".to_string(),
+                pattern: Some(pattern.clone()),
+            },
+            Condition::StartsWithStemmed { pattern } => SerdeCondition {
+                anchoring: "startsWithStemmed".to_string(),
+                pattern: Some(pattern.clone()),
+            },
+            Condition::ContainsStemmed { pattern } => SerdeCondition {
+                anchoring: "containsStemmed".to_string(),
                 pattern: Some(pattern.clone()),
             },
         };
@@ -139,6 +153,27 @@ impl<'de> Deserialize<'de> for Condition {
                     Err(serde::de::Error::custom("Unexpected pattern"))
                 }
             }
+            "isStemmed" => {
+                if let Some(pattern) = c.pattern {
+                    Ok(Condition::Is { pattern })
+                } else {
+                    Err(serde::de::Error::custom("Unexpected pattern"))
+                }
+            }
+            "startsWithStemmed" => {
+                if let Some(pattern) = c.pattern {
+                    Ok(Condition::StartsWith { pattern })
+                } else {
+                    Err(serde::de::Error::custom("Unexpected pattern"))
+                }
+            }
+            "containsStemmed" => {
+                if let Some(pattern) = c.pattern {
+                    Ok(Condition::Contains { pattern })
+                } else {
+                    Err(serde::de::Error::custom("Unexpected pattern"))
+                }
+            }
             _ => Err(serde::de::Error::custom("Unexpected anchoring")),
         }
     }
@@ -150,14 +185,12 @@ pub enum Anchoring {
     Is,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Consequence<DocId> {
     pub promote: Vec<PromoteItem<DocId>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PromoteItem<DocId> {
     pub doc_id: DocId,
     pub position: u32,
