@@ -70,14 +70,23 @@ impl TryFrom<serde_json::Value> for PinRule<String> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Condition {
-    Is { pattern: String },
-    StartsWith { pattern: String },
-    Contains { pattern: String },
+pub enum MatchType {
+    Is,
+    StartsWith,
+    Contains,
+}
 
-    IsStemmed { pattern: String },
-    StartsWithStemmed { pattern: String },
-    ContainsStemmed { pattern: String },
+#[derive(Debug, Clone, PartialEq)]
+pub enum Normalization {
+    None,
+    Stem,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Condition {
+    pub pattern: String,
+    pub match_type: MatchType,
+    pub normalization: Normalization,
 }
 
 /// Required for the bincode deserialization
@@ -94,33 +103,20 @@ impl Serialize for Condition {
     where
         S: Serializer,
     {
-        let c = match self {
-            Condition::Is { pattern } => SerdeCondition {
-                anchoring: "is".to_string(),
-                pattern: Some(pattern.clone()),
-            },
-            Condition::StartsWith { pattern } => SerdeCondition {
-                anchoring: "startsWith".to_string(),
-                pattern: Some(pattern.clone()),
-            },
-            Condition::Contains { pattern } => SerdeCondition {
-                anchoring: "contains".to_string(),
-                pattern: Some(pattern.clone()),
-            },
-            Condition::IsStemmed { pattern } => SerdeCondition {
-                anchoring: "isStemmed".to_string(),
-                pattern: Some(pattern.clone()),
-            },
-            Condition::StartsWithStemmed { pattern } => SerdeCondition {
-                anchoring: "startsWithStemmed".to_string(),
-                pattern: Some(pattern.clone()),
-            },
-            Condition::ContainsStemmed { pattern } => SerdeCondition {
-                anchoring: "containsStemmed".to_string(),
-                pattern: Some(pattern.clone()),
-            },
+        let anchoring = match (&self.match_type, &self.normalization) {
+            (MatchType::Is, Normalization::None) => "is",
+            (MatchType::StartsWith, Normalization::None) => "startsWith",
+            (MatchType::Contains, Normalization::None) => "contains",
+            (MatchType::Is, Normalization::Stem) => "isStemmed",
+            (MatchType::StartsWith, Normalization::Stem) => "startsWithStemmed",
+            (MatchType::Contains, Normalization::Stem) => "containsStemmed",
         };
-        c.serialize(serializer)
+
+        let sc = SerdeCondition {
+            anchoring: anchoring.to_string(),
+            pattern: Some(self.pattern.clone()),
+        };
+        sc.serialize(serializer)
     }
 }
 
@@ -130,52 +126,25 @@ impl<'de> Deserialize<'de> for Condition {
         D: Deserializer<'de>,
     {
         let c = SerdeCondition::deserialize(deserializer)?;
+        let pattern = c
+            .pattern
+            .ok_or_else(|| serde::de::Error::custom("Unexpected pattern"))?;
 
-        match c.anchoring.as_str() {
-            "is" => {
-                if let Some(pattern) = c.pattern {
-                    Ok(Condition::Is { pattern })
-                } else {
-                    Err(serde::de::Error::custom("Unexpected pattern"))
-                }
-            }
-            "startsWith" => {
-                if let Some(pattern) = c.pattern {
-                    Ok(Condition::StartsWith { pattern })
-                } else {
-                    Err(serde::de::Error::custom("Unexpected pattern"))
-                }
-            }
-            "contains" => {
-                if let Some(pattern) = c.pattern {
-                    Ok(Condition::Contains { pattern })
-                } else {
-                    Err(serde::de::Error::custom("Unexpected pattern"))
-                }
-            }
-            "isStemmed" => {
-                if let Some(pattern) = c.pattern {
-                    Ok(Condition::Is { pattern })
-                } else {
-                    Err(serde::de::Error::custom("Unexpected pattern"))
-                }
-            }
-            "startsWithStemmed" => {
-                if let Some(pattern) = c.pattern {
-                    Ok(Condition::StartsWith { pattern })
-                } else {
-                    Err(serde::de::Error::custom("Unexpected pattern"))
-                }
-            }
-            "containsStemmed" => {
-                if let Some(pattern) = c.pattern {
-                    Ok(Condition::Contains { pattern })
-                } else {
-                    Err(serde::de::Error::custom("Unexpected pattern"))
-                }
-            }
-            _ => Err(serde::de::Error::custom("Unexpected anchoring")),
-        }
+        let (match_type, normalization) = match c.anchoring.as_str() {
+            "is" => (MatchType::Is, Normalization::None),
+            "startsWith" => (MatchType::StartsWith, Normalization::None),
+            "contains" => (MatchType::Contains, Normalization::None),
+            "isStemmed" => (MatchType::Is, Normalization::Stem),
+            "startsWithStemmed" => (MatchType::StartsWith, Normalization::Stem),
+            "containsStemmed" => (MatchType::Contains, Normalization::Stem),
+            _ => return Err(serde::de::Error::custom("Unexpected anchoring")),
+        };
+
+        Ok(Condition {
+            pattern,
+            match_type,
+            normalization,
+        })
     }
 }
 
@@ -230,8 +199,10 @@ mod tests {
         test_deserialization_logic(
             json,
             "promote-red-jacket",
-            Condition::Is {
+            Condition {
                 pattern: "red jacket".to_string(),
+                match_type: MatchType::Is,
+                normalization: Normalization::None,
             },
             vec![
                 PromoteItem {
@@ -257,8 +228,10 @@ mod tests {
         test_deserialization_logic(
             json,
             "promote-starts-with",
-            Condition::StartsWith {
+            Condition {
                 pattern: "red".to_string(),
+                match_type: MatchType::StartsWith,
+                normalization: Normalization::None,
             },
             vec![PromoteItem {
                 doc_id: "RED_ITEM1".to_string(),
@@ -283,8 +256,10 @@ mod tests {
         test_deserialization_logic(
             json,
             "promote-contains",
-            Condition::Contains {
+            Condition {
                 pattern: "jacket".to_string(),
+                match_type: MatchType::Contains,
+                normalization: Normalization::None,
             },
             vec![
                 PromoteItem {
@@ -302,14 +277,48 @@ mod tests {
     #[test]
     fn test_condition_serialization_roundtrip() {
         let conditions = vec![
-            Condition::Is {
+            Condition {
                 pattern: "exact match".to_string(),
+                match_type: MatchType::Is,
+                normalization: Normalization::None,
             },
-            Condition::StartsWith {
+            Condition {
                 pattern: "prefix".to_string(),
+                match_type: MatchType::StartsWith,
+                normalization: Normalization::None,
             },
-            Condition::Contains {
+            Condition {
                 pattern: "middle".to_string(),
+                match_type: MatchType::Contains,
+                normalization: Normalization::None,
+            },
+        ];
+
+        let serialized =
+            serde_json::to_string_pretty(&conditions).expect("Failed to serialize conditions");
+
+        let deserialized: Vec<Condition> =
+            serde_json::from_str(&serialized).expect("Failed to deserialize conditions");
+        assert_eq!(deserialized, conditions);
+    }
+
+    #[test]
+    fn test_condition_serialization_roundtrip_stemmed() {
+        let conditions = vec![
+            Condition {
+                pattern: "exact match".to_string(),
+                match_type: MatchType::Is,
+                normalization: Normalization::Stem,
+            },
+            Condition {
+                pattern: "prefix".to_string(),
+                match_type: MatchType::StartsWith,
+                normalization: Normalization::Stem,
+            },
+            Condition {
+                pattern: "middle".to_string(),
+                match_type: MatchType::Contains,
+                normalization: Normalization::Stem,
             },
         ];
 

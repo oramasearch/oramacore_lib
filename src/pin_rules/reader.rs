@@ -1,4 +1,4 @@
-use std::{fmt::Debug, path::PathBuf};
+use std::{collections::HashMap, fmt::Debug, path::PathBuf};
 
 use crate::fs::*;
 use crate::nlp::TextParser;
@@ -8,7 +8,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use tracing::error;
 
-use super::{Condition, Consequence, PinRule, PinRuleOperation};
+use super::{Consequence, MatchType, Normalization, PinRule, PinRuleOperation};
 
 #[derive(Error, Debug)]
 pub enum PinRulesReaderError {
@@ -110,34 +110,26 @@ impl<DocumentId: Serialize + DeserializeOwned + Debug + Clone> PinRulesReader<Do
     pub fn apply(&self, term: &str, text_parser: &TextParser) -> Vec<Consequence<DocumentId>> {
         let mut results = Vec::new();
         let mut term_stems_cache: Option<String> = None;
+        let mut pattern_stems_cache: HashMap<&str, String> = HashMap::new();
 
         for rule in &self.rules {
             for c in &rule.conditions {
-                let matched = match c {
-                    Condition::Is { pattern } => term == pattern,
-                    Condition::StartsWith { pattern } => term.starts_with(pattern),
-                    Condition::Contains { pattern } => term.contains(pattern),
-                    Condition::IsStemmed { pattern } => {
-                        let term_stems = term_stems_cache
+                let (term, pattern) = match c.normalization {
+                    Normalization::None => (term, c.pattern.as_str()),
+                    Normalization::Stem => {
+                        let term_stems: &str = term_stems_cache
                             .get_or_insert_with(|| get_token_stems_from_text(term, text_parser));
-                        let pattern = get_token_stems_from_text(pattern, text_parser);
-
-                        term_stems == &pattern
+                        let pattern_stems: &str = pattern_stems_cache
+                            .entry(&c.pattern)
+                            .or_insert_with(|| get_token_stems_from_text(&c.pattern, text_parser));
+                        (term_stems, pattern_stems)
                     }
-                    Condition::StartsWithStemmed { pattern } => {
-                        let term_stems = term_stems_cache
-                            .get_or_insert_with(|| get_token_stems_from_text(term, text_parser));
-                        let pattern = get_token_stems_from_text(pattern, text_parser);
+                };
 
-                        term_stems.starts_with(&pattern)
-                    }
-                    Condition::ContainsStemmed { pattern } => {
-                        let term_stems = term_stems_cache
-                            .get_or_insert_with(|| get_token_stems_from_text(term, text_parser));
-                        let pattern = get_token_stems_from_text(pattern, text_parser);
-
-                        term_stems.contains(&pattern)
-                    }
+                let matched = match c.match_type {
+                    MatchType::Is => term == pattern,
+                    MatchType::StartsWith => term.starts_with(pattern),
+                    MatchType::Contains => term.contains(pattern),
                 };
 
                 if matched {
@@ -157,17 +149,14 @@ mod pin_rules_tests {
 
     use super::*;
     use crate::nlp::locales::Locale;
-    use crate::pin_rules::PromoteItem;
+    use crate::pin_rules::{Condition, MatchType, Normalization, PromoteItem};
 
     #[test]
     fn test_pin_rules_reader_empty() {
         let reader: PinRulesReader<()> = PinRulesReader::empty();
-
         let ids = reader.get_rule_ids();
         assert_eq!(ids.len(), 0);
-
         let text_parser = TextParser::from_locale(Locale::EN);
-
         let consequences = reader.apply("test", &text_parser);
         assert!(consequences.is_empty());
     }
@@ -181,8 +170,10 @@ mod pin_rules_tests {
         reader
             .update(PinRuleOperation::Insert(PinRule {
                 id: "test-rule-1".to_string(),
-                conditions: vec![Condition::Is {
+                conditions: vec![Condition {
                     pattern: "test".to_string(),
+                    match_type: MatchType::Is,
+                    normalization: Normalization::None,
                 }],
                 consequence: Consequence {
                     promote: vec![PromoteItem {
@@ -245,14 +236,20 @@ mod pin_rules_tests {
             .update(PinRuleOperation::Insert(PinRule {
                 id: "test-rules".to_string(),
                 conditions: vec![
-                    Condition::Is {
+                    Condition {
                         pattern: "test_is".to_string(),
+                        match_type: MatchType::Is,
+                        normalization: Normalization::None,
                     },
-                    Condition::StartsWith {
+                    Condition {
                         pattern: "test_start_with".to_string(),
+                        match_type: MatchType::StartsWith,
+                        normalization: Normalization::None,
                     },
-                    Condition::Contains {
+                    Condition {
                         pattern: "test_contains".to_string(),
+                        match_type: MatchType::Contains,
+                        normalization: Normalization::None,
                     },
                 ],
                 consequence: Consequence {
@@ -294,8 +291,10 @@ mod pin_rules_tests {
         reader
             .update(PinRuleOperation::Insert(PinRule {
                 id: "test-is-stemmed-rule".to_string(),
-                conditions: vec![Condition::IsStemmed {
+                conditions: vec![Condition {
                     pattern: "shoes".to_string(),
+                    match_type: MatchType::Is,
+                    normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
                     promote: vec![PromoteItem {
@@ -309,8 +308,10 @@ mod pin_rules_tests {
         reader
             .update(PinRuleOperation::Insert(PinRule {
                 id: "test-starts-with-stemmed-rule".to_string(),
-                conditions: vec![Condition::StartsWithStemmed {
+                conditions: vec![Condition {
                     pattern: "shoes".to_string(),
+                    match_type: MatchType::StartsWith,
+                    normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
                     promote: vec![PromoteItem {
@@ -324,8 +325,10 @@ mod pin_rules_tests {
         reader
             .update(PinRuleOperation::Insert(PinRule {
                 id: "test-contains-stemmed-rule".to_string(),
-                conditions: vec![Condition::ContainsStemmed {
+                conditions: vec![Condition {
                     pattern: "shoes".to_string(),
+                    match_type: MatchType::Contains,
+                    normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
                     promote: vec![PromoteItem {
@@ -360,8 +363,10 @@ mod pin_rules_tests {
         reader
             .update(PinRuleOperation::Insert(PinRule {
                 id: "test-is-stemmed-rule".to_string(),
-                conditions: vec![Condition::IsStemmed {
+                conditions: vec![Condition {
                     pattern: "fruitless".to_string(),
+                    match_type: MatchType::Is,
+                    normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
                     promote: vec![PromoteItem {
@@ -383,8 +388,10 @@ mod pin_rules_tests {
         reader
             .update(PinRuleOperation::Insert(PinRule {
                 id: "is-stemmed-sentence".to_string(),
-                conditions: vec![Condition::IsStemmed {
+                conditions: vec![Condition {
                     pattern: "a man walks".to_string(),
+                    match_type: MatchType::Is,
+                    normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
                     promote: vec![PromoteItem {
@@ -406,8 +413,10 @@ mod pin_rules_tests {
         reader
             .update(PinRuleOperation::Insert(PinRule {
                 id: "starts-with-stemmed-sentence".to_string(),
-                conditions: vec![Condition::StartsWithStemmed {
+                conditions: vec![Condition {
                     pattern: "run shoe".to_string(),
+                    match_type: MatchType::StartsWith,
+                    normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
                     promote: vec![PromoteItem {
@@ -426,8 +435,10 @@ mod pin_rules_tests {
         reader
             .update(PinRuleOperation::Insert(PinRule {
                 id: "contains-stemmed-sentence".to_string(),
-                conditions: vec![Condition::ContainsStemmed {
+                conditions: vec![Condition {
                     pattern: "run shoe".to_string(),
+                    match_type: MatchType::Contains,
+                    normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
                     promote: vec![PromoteItem {
@@ -446,8 +457,10 @@ mod pin_rules_tests {
         reader
             .update(PinRuleOperation::Insert(PinRule {
                 id: "symmetric-is-stemmed".to_string(),
-                conditions: vec![Condition::IsStemmed {
+                conditions: vec![Condition {
                     pattern: "shoes".to_string(),
+                    match_type: MatchType::Is,
+                    normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
                     promote: vec![PromoteItem {
@@ -465,8 +478,10 @@ mod pin_rules_tests {
         reader
             .update(PinRuleOperation::Insert(PinRule {
                 id: "symmetric-is-stemmed-2".to_string(),
-                conditions: vec![Condition::IsStemmed {
+                conditions: vec![Condition {
                     pattern: "shoe".to_string(),
+                    match_type: MatchType::Is,
+                    normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
                     promote: vec![PromoteItem {
