@@ -95,7 +95,9 @@ pub struct Condition {
 #[derive(Serialize, Deserialize, Debug)]
 struct SerdeCondition {
     anchoring: String,
-    pattern: Option<String>,
+    pattern: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    normalization: Option<String>,
 }
 
 impl Serialize for Condition {
@@ -103,20 +105,23 @@ impl Serialize for Condition {
     where
         S: Serializer,
     {
-        let anchoring = match (&self.anchoring, &self.normalization) {
-            (Anchoring::Is, Normalization::None) => "is",
-            (Anchoring::StartsWith, Normalization::None) => "startsWith",
-            (Anchoring::Contains, Normalization::None) => "contains",
-            (Anchoring::Is, Normalization::Stem) => "isStemmed",
-            (Anchoring::StartsWith, Normalization::Stem) => "startsWithStemmed",
-            (Anchoring::Contains, Normalization::Stem) => "containsStemmed",
+        let anchoring = match self.anchoring {
+            Anchoring::Is => "is",
+            Anchoring::StartsWith => "startsWith",
+            Anchoring::Contains => "contains",
         };
 
-        let sc = SerdeCondition {
-            anchoring: anchoring.to_string(),
-            pattern: Some(self.pattern.clone()),
+        let normalization = match self.normalization {
+            Normalization::None => None,
+            Normalization::Stem => Some("stem".to_string()),
         };
-        sc.serialize(serializer)
+
+        SerdeCondition {
+            pattern: self.pattern.clone(),
+            anchoring: anchoring.to_string(),
+            normalization,
+        }
+        .serialize(serializer)
     }
 }
 
@@ -126,17 +131,11 @@ impl<'de> Deserialize<'de> for Condition {
         D: Deserializer<'de>,
     {
         let c = SerdeCondition::deserialize(deserializer)?;
-        let pattern = c
-            .pattern
-            .ok_or_else(|| serde::de::Error::custom("Unexpected pattern"))?;
 
-        let (match_type, normalization) = match c.anchoring.as_str() {
-            "is" => (Anchoring::Is, Normalization::None),
-            "startsWith" => (Anchoring::StartsWith, Normalization::None),
-            "contains" => (Anchoring::Contains, Normalization::None),
-            "isStemmed" => (Anchoring::Is, Normalization::Stem),
-            "startsWithStemmed" => (Anchoring::StartsWith, Normalization::Stem),
-            "containsStemmed" => (Anchoring::Contains, Normalization::Stem),
+        let anchoring = match c.anchoring.as_str() {
+            "is" => Anchoring::Is,
+            "startsWith" => Anchoring::StartsWith,
+            "contains" => Anchoring::Contains,
             anchor => {
                 return Err(serde::de::Error::custom(format!(
                     "Unexpected anchoring '{anchor}'"
@@ -144,9 +143,21 @@ impl<'de> Deserialize<'de> for Condition {
             }
         };
 
+        let normalization = match c.normalization {
+            None => Normalization::None,
+            Some(t) => match t.as_str() {
+                "stem" => Normalization::Stem,
+                norm => {
+                    return Err(serde::de::Error::custom(format!(
+                        "Unexpected normalization '{norm}'"
+                    )));
+                }
+            },
+        };
+
         Ok(Condition {
-            pattern,
-            anchoring: match_type,
+            pattern: c.pattern.clone(),
+            anchoring,
             normalization,
         })
     }
@@ -219,7 +230,7 @@ mod tests {
     fn test_startswith_deserialization() {
         let json = r#"{
                 "id": "promote-starts-with",
-                "conditions": [ { "pattern": "red", "anchoring": "startsWith" } ],
+                "conditions": [ { "pattern": "red", "anchoring": "startsWith", "normalization": "stem" } ],
                 "consequence": { "promote": [ { "doc_id": "RED_ITEM1", "position": 1 } ] }
             }"#;
 
@@ -229,7 +240,7 @@ mod tests {
             Condition {
                 pattern: "red".to_string(),
                 anchoring: Anchoring::StartsWith,
-                normalization: Normalization::None,
+                normalization: Normalization::Stem,
             },
             vec![PromoteItem {
                 doc_id: "RED_ITEM1".to_string(),
@@ -290,31 +301,18 @@ mod tests {
                 anchoring: Anchoring::Contains,
                 normalization: Normalization::None,
             },
-        ];
-
-        let serialized =
-            serde_json::to_string_pretty(&conditions).expect("Failed to serialize conditions");
-
-        let deserialized: Vec<Condition> =
-            serde_json::from_str(&serialized).expect("Failed to deserialize conditions");
-        assert_eq!(deserialized, conditions);
-    }
-
-    #[test]
-    fn test_condition_serialization_roundtrip_stemmed() {
-        let conditions = vec![
             Condition {
-                pattern: "exact match".to_string(),
+                pattern: "exact match stemmed".to_string(),
                 anchoring: Anchoring::Is,
                 normalization: Normalization::Stem,
             },
             Condition {
-                pattern: "prefix".to_string(),
+                pattern: "prefix stemmed".to_string(),
                 anchoring: Anchoring::StartsWith,
                 normalization: Normalization::Stem,
             },
             Condition {
-                pattern: "middle".to_string(),
+                pattern: "middle stemmed".to_string(),
                 anchoring: Anchoring::Contains,
                 normalization: Normalization::Stem,
             },
