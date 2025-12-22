@@ -100,7 +100,6 @@ pub struct Condition {
 struct SerdeCondition {
     anchoring: String,
     pattern: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     normalization: Option<String>,
 }
 
