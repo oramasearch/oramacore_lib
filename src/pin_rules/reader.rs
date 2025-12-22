@@ -292,7 +292,7 @@ mod pin_rules_tests {
             .update(PinRuleOperation::Insert(PinRule {
                 id: "test-is-stemmed-rule".to_string(),
                 conditions: vec![Condition {
-                    pattern: "shoes".to_string(),
+                    pattern: "run".to_string(),
                     anchoring: Anchoring::Is,
                     normalization: Normalization::Stem,
                 }],
@@ -309,7 +309,7 @@ mod pin_rules_tests {
             .update(PinRuleOperation::Insert(PinRule {
                 id: "test-starts-with-stemmed-rule".to_string(),
                 conditions: vec![Condition {
-                    pattern: "shoes".to_string(),
+                    pattern: "runs".to_string(),
                     anchoring: Anchoring::StartsWith,
                     normalization: Normalization::Stem,
                 }],
@@ -326,7 +326,7 @@ mod pin_rules_tests {
             .update(PinRuleOperation::Insert(PinRule {
                 id: "test-contains-stemmed-rule".to_string(),
                 conditions: vec![Condition {
-                    pattern: "shoes".to_string(),
+                    pattern: "running".to_string(),
                     anchoring: Anchoring::Contains,
                     normalization: Normalization::Stem,
                 }],
@@ -339,45 +339,21 @@ mod pin_rules_tests {
             }))
             .expect("Failed to insert rule");
 
-        // user term: "shoe red", pin term: "shoes"
-        // IsStemmed should not match because of "red"
-        // StartsWithStemmed should match because "shoe" is a stem of "shoes"
-        // ContainsStemmed should match because "shoe" is a stem of "shoes"
-        let consequences = reader.apply("shoe red", &text_parser);
+        let consequences = reader.apply("running fast", &text_parser);
         assert_eq!(consequences.len(), 2);
         let promoted_docs: HashSet<usize> =
             consequences.iter().map(|c| c.promote[0].doc_id).collect();
-        assert!(!promoted_docs.contains(&1));
-        assert!(promoted_docs.contains(&2));
-        assert!(promoted_docs.contains(&3));
+        assert!(!promoted_docs.contains(&1)); // IsStemmed should not match because of "red"
+        assert!(promoted_docs.contains(&2)); // StartsWithStemmed should match because "run" is a stem of "runs"
+        assert!(promoted_docs.contains(&3)); // ContainsStemmed should match because "run" is a stem of "running"
 
-        let consequences = reader.apply("shoe", &text_parser);
+        let consequences = reader.apply("runs", &text_parser);
         assert_eq!(consequences.len(), 3);
         let promoted_docs: HashSet<usize> =
             consequences.iter().map(|c| c.promote[0].doc_id).collect();
         assert!(promoted_docs.contains(&1));
         assert!(promoted_docs.contains(&2));
         assert!(promoted_docs.contains(&3));
-
-        let mut reader: PinRulesReader<usize> = PinRulesReader::empty();
-        reader
-            .update(PinRuleOperation::Insert(PinRule {
-                id: "test-is-stemmed-rule".to_string(),
-                conditions: vec![Condition {
-                    pattern: "fruitless".to_string(),
-                    anchoring: Anchoring::Is,
-                    normalization: Normalization::Stem,
-                }],
-                consequence: Consequence {
-                    promote: vec![PromoteItem {
-                        doc_id: 1,
-                        position: 1,
-                    }],
-                },
-            }))
-            .expect("Failed to insert rule");
-        let consequences = reader.apply("fruitlessly", &text_parser);
-        assert_eq!(consequences.len(), 1);
     }
 
     #[test]

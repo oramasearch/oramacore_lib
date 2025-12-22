@@ -137,7 +137,11 @@ impl<'de> Deserialize<'de> for Condition {
             "isStemmed" => (Anchoring::Is, Normalization::Stem),
             "startsWithStemmed" => (Anchoring::StartsWith, Normalization::Stem),
             "containsStemmed" => (Anchoring::Contains, Normalization::Stem),
-            _ => return Err(serde::de::Error::custom("Unexpected anchoring")),
+            anchor => {
+                return Err(serde::de::Error::custom(format!(
+                    "Unexpected anchoring '{anchor}'"
+                )));
+            }
         };
 
         Ok(Condition {
