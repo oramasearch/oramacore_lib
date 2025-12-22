@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug, path::PathBuf};
+use std::{fmt::Debug, path::PathBuf};
 
 use crate::fs::*;
 use crate::nlp::TextParser;
@@ -110,26 +110,29 @@ impl<DocumentId: Serialize + DeserializeOwned + Debug + Clone> PinRulesReader<Do
     pub fn apply(&self, term: &str, text_parser: &TextParser) -> Vec<Consequence<DocumentId>> {
         let mut results = Vec::new();
         let mut term_stems_cache: Option<String> = None;
-        let mut pattern_stems_cache: HashMap<&str, String> = HashMap::new();
 
         for rule in &self.rules {
             for c in &rule.conditions {
-                let (term, pattern) = match c.normalization {
+                let pattern_stems_owned_string: String;
+
+                let (term_to_match, pattern_to_match) = match c.normalization {
                     Normalization::None => (term, c.pattern.as_str()),
                     Normalization::Stem => {
                         let term_stems: &str = term_stems_cache
                             .get_or_insert_with(|| get_token_stems_from_text(term, text_parser));
-                        let pattern_stems: &str = pattern_stems_cache
-                            .entry(&c.pattern)
-                            .or_insert_with(|| get_token_stems_from_text(&c.pattern, text_parser));
-                        (term_stems, pattern_stems)
+
+                        pattern_stems_owned_string =
+                            get_token_stems_from_text(&c.pattern, text_parser);
+                        let pattern_stems_ref: &str = pattern_stems_owned_string.as_str();
+
+                        (term_stems, pattern_stems_ref)
                     }
                 };
 
                 let matched = match c.anchoring {
-                    Anchoring::Is => term == pattern,
-                    Anchoring::StartsWith => term.starts_with(pattern),
-                    Anchoring::Contains => term.contains(pattern),
+                    Anchoring::Is => term_to_match == pattern_to_match,
+                    Anchoring::StartsWith => term_to_match.starts_with(pattern_to_match),
+                    Anchoring::Contains => term_to_match.contains(pattern_to_match),
                 };
 
                 if matched {
