@@ -70,7 +70,7 @@ impl TryFrom<serde_json::Value> for PinRule<String> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum MatchType {
+pub enum Anchoring {
     Is,
     StartsWith,
     Contains,
@@ -85,7 +85,7 @@ pub enum Normalization {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Condition {
     pub pattern: String,
-    pub match_type: MatchType,
+    pub anchoring: Anchoring,
     pub normalization: Normalization,
 }
 
@@ -103,13 +103,13 @@ impl Serialize for Condition {
     where
         S: Serializer,
     {
-        let anchoring = match (&self.match_type, &self.normalization) {
-            (MatchType::Is, Normalization::None) => "is",
-            (MatchType::StartsWith, Normalization::None) => "startsWith",
-            (MatchType::Contains, Normalization::None) => "contains",
-            (MatchType::Is, Normalization::Stem) => "isStemmed",
-            (MatchType::StartsWith, Normalization::Stem) => "startsWithStemmed",
-            (MatchType::Contains, Normalization::Stem) => "containsStemmed",
+        let anchoring = match (&self.anchoring, &self.normalization) {
+            (Anchoring::Is, Normalization::None) => "is",
+            (Anchoring::StartsWith, Normalization::None) => "startsWith",
+            (Anchoring::Contains, Normalization::None) => "contains",
+            (Anchoring::Is, Normalization::Stem) => "isStemmed",
+            (Anchoring::StartsWith, Normalization::Stem) => "startsWithStemmed",
+            (Anchoring::Contains, Normalization::Stem) => "containsStemmed",
         };
 
         let sc = SerdeCondition {
@@ -131,27 +131,21 @@ impl<'de> Deserialize<'de> for Condition {
             .ok_or_else(|| serde::de::Error::custom("Unexpected pattern"))?;
 
         let (match_type, normalization) = match c.anchoring.as_str() {
-            "is" => (MatchType::Is, Normalization::None),
-            "startsWith" => (MatchType::StartsWith, Normalization::None),
-            "contains" => (MatchType::Contains, Normalization::None),
-            "isStemmed" => (MatchType::Is, Normalization::Stem),
-            "startsWithStemmed" => (MatchType::StartsWith, Normalization::Stem),
-            "containsStemmed" => (MatchType::Contains, Normalization::Stem),
+            "is" => (Anchoring::Is, Normalization::None),
+            "startsWith" => (Anchoring::StartsWith, Normalization::None),
+            "contains" => (Anchoring::Contains, Normalization::None),
+            "isStemmed" => (Anchoring::Is, Normalization::Stem),
+            "startsWithStemmed" => (Anchoring::StartsWith, Normalization::Stem),
+            "containsStemmed" => (Anchoring::Contains, Normalization::Stem),
             _ => return Err(serde::de::Error::custom("Unexpected anchoring")),
         };
 
         Ok(Condition {
             pattern,
-            match_type,
+            anchoring: match_type,
             normalization,
         })
     }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum Anchoring {
-    Is,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -201,7 +195,7 @@ mod tests {
             "promote-red-jacket",
             Condition {
                 pattern: "red jacket".to_string(),
-                match_type: MatchType::Is,
+                anchoring: Anchoring::Is,
                 normalization: Normalization::None,
             },
             vec![
@@ -230,7 +224,7 @@ mod tests {
             "promote-starts-with",
             Condition {
                 pattern: "red".to_string(),
-                match_type: MatchType::StartsWith,
+                anchoring: Anchoring::StartsWith,
                 normalization: Normalization::None,
             },
             vec![PromoteItem {
@@ -258,7 +252,7 @@ mod tests {
             "promote-contains",
             Condition {
                 pattern: "jacket".to_string(),
-                match_type: MatchType::Contains,
+                anchoring: Anchoring::Contains,
                 normalization: Normalization::None,
             },
             vec![
@@ -279,17 +273,17 @@ mod tests {
         let conditions = vec![
             Condition {
                 pattern: "exact match".to_string(),
-                match_type: MatchType::Is,
+                anchoring: Anchoring::Is,
                 normalization: Normalization::None,
             },
             Condition {
                 pattern: "prefix".to_string(),
-                match_type: MatchType::StartsWith,
+                anchoring: Anchoring::StartsWith,
                 normalization: Normalization::None,
             },
             Condition {
                 pattern: "middle".to_string(),
-                match_type: MatchType::Contains,
+                anchoring: Anchoring::Contains,
                 normalization: Normalization::None,
             },
         ];
@@ -307,17 +301,17 @@ mod tests {
         let conditions = vec![
             Condition {
                 pattern: "exact match".to_string(),
-                match_type: MatchType::Is,
+                anchoring: Anchoring::Is,
                 normalization: Normalization::Stem,
             },
             Condition {
                 pattern: "prefix".to_string(),
-                match_type: MatchType::StartsWith,
+                anchoring: Anchoring::StartsWith,
                 normalization: Normalization::Stem,
             },
             Condition {
                 pattern: "middle".to_string(),
-                match_type: MatchType::Contains,
+                anchoring: Anchoring::Contains,
                 normalization: Normalization::Stem,
             },
         ];

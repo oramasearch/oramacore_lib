@@ -8,7 +8,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use tracing::error;
 
-use super::{Consequence, MatchType, Normalization, PinRule, PinRuleOperation};
+use super::{Anchoring, Consequence, Normalization, PinRule, PinRuleOperation};
 
 #[derive(Error, Debug)]
 pub enum PinRulesReaderError {
@@ -126,10 +126,10 @@ impl<DocumentId: Serialize + DeserializeOwned + Debug + Clone> PinRulesReader<Do
                     }
                 };
 
-                let matched = match c.match_type {
-                    MatchType::Is => term == pattern,
-                    MatchType::StartsWith => term.starts_with(pattern),
-                    MatchType::Contains => term.contains(pattern),
+                let matched = match c.anchoring {
+                    Anchoring::Is => term == pattern,
+                    Anchoring::StartsWith => term.starts_with(pattern),
+                    Anchoring::Contains => term.contains(pattern),
                 };
 
                 if matched {
@@ -149,7 +149,7 @@ mod pin_rules_tests {
 
     use super::*;
     use crate::nlp::locales::Locale;
-    use crate::pin_rules::{Condition, MatchType, Normalization, PromoteItem};
+    use crate::pin_rules::{Anchoring, Condition, Normalization, PromoteItem};
 
     #[test]
     fn test_pin_rules_reader_empty() {
@@ -172,7 +172,7 @@ mod pin_rules_tests {
                 id: "test-rule-1".to_string(),
                 conditions: vec![Condition {
                     pattern: "test".to_string(),
-                    match_type: MatchType::Is,
+                    anchoring: Anchoring::Is,
                     normalization: Normalization::None,
                 }],
                 consequence: Consequence {
@@ -238,17 +238,17 @@ mod pin_rules_tests {
                 conditions: vec![
                     Condition {
                         pattern: "test_is".to_string(),
-                        match_type: MatchType::Is,
+                        anchoring: Anchoring::Is,
                         normalization: Normalization::None,
                     },
                     Condition {
                         pattern: "test_start_with".to_string(),
-                        match_type: MatchType::StartsWith,
+                        anchoring: Anchoring::StartsWith,
                         normalization: Normalization::None,
                     },
                     Condition {
                         pattern: "test_contains".to_string(),
-                        match_type: MatchType::Contains,
+                        anchoring: Anchoring::Contains,
                         normalization: Normalization::None,
                     },
                 ],
@@ -293,7 +293,7 @@ mod pin_rules_tests {
                 id: "test-is-stemmed-rule".to_string(),
                 conditions: vec![Condition {
                     pattern: "shoes".to_string(),
-                    match_type: MatchType::Is,
+                    anchoring: Anchoring::Is,
                     normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
@@ -310,7 +310,7 @@ mod pin_rules_tests {
                 id: "test-starts-with-stemmed-rule".to_string(),
                 conditions: vec![Condition {
                     pattern: "shoes".to_string(),
-                    match_type: MatchType::StartsWith,
+                    anchoring: Anchoring::StartsWith,
                     normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
@@ -327,7 +327,7 @@ mod pin_rules_tests {
                 id: "test-contains-stemmed-rule".to_string(),
                 conditions: vec![Condition {
                     pattern: "shoes".to_string(),
-                    match_type: MatchType::Contains,
+                    anchoring: Anchoring::Contains,
                     normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
@@ -365,7 +365,7 @@ mod pin_rules_tests {
                 id: "test-is-stemmed-rule".to_string(),
                 conditions: vec![Condition {
                     pattern: "fruitless".to_string(),
-                    match_type: MatchType::Is,
+                    anchoring: Anchoring::Is,
                     normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
@@ -390,7 +390,7 @@ mod pin_rules_tests {
                 id: "is-stemmed-sentence".to_string(),
                 conditions: vec![Condition {
                     pattern: "a man walks".to_string(),
-                    match_type: MatchType::Is,
+                    anchoring: Anchoring::Is,
                     normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
@@ -415,7 +415,7 @@ mod pin_rules_tests {
                 id: "starts-with-stemmed-sentence".to_string(),
                 conditions: vec![Condition {
                     pattern: "run shoe".to_string(),
-                    match_type: MatchType::StartsWith,
+                    anchoring: Anchoring::StartsWith,
                     normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
@@ -437,7 +437,7 @@ mod pin_rules_tests {
                 id: "contains-stemmed-sentence".to_string(),
                 conditions: vec![Condition {
                     pattern: "run shoe".to_string(),
-                    match_type: MatchType::Contains,
+                    anchoring: Anchoring::Contains,
                     normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
@@ -459,7 +459,7 @@ mod pin_rules_tests {
                 id: "symmetric-is-stemmed".to_string(),
                 conditions: vec![Condition {
                     pattern: "shoes".to_string(),
-                    match_type: MatchType::Is,
+                    anchoring: Anchoring::Is,
                     normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
@@ -480,7 +480,7 @@ mod pin_rules_tests {
                 id: "symmetric-is-stemmed-2".to_string(),
                 conditions: vec![Condition {
                     pattern: "shoe".to_string(),
-                    match_type: MatchType::Is,
+                    anchoring: Anchoring::Is,
                     normalization: Normalization::Stem,
                 }],
                 consequence: Consequence {
