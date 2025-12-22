@@ -160,7 +160,7 @@ impl<'de> Deserialize<'de> for Condition {
         };
 
         Ok(Condition {
-            pattern: c.pattern.clone(),
+            pattern: c.pattern,
             anchoring,
             normalization,
         })
