@@ -28,7 +28,7 @@ fn get_token_stems_from_text(text: &str, text_parser: &TextParser) -> String {
         .tokenize_and_stem(text)
         .into_iter()
         .map(|(token, stems)| {
-            if let Some(stem) = stems.first() {
+            if let Some(stem) = stems {
                 stem.to_owned()
             } else {
                 token
