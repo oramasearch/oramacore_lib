@@ -16,7 +16,7 @@ pub use rust_stemmers::Stemmer;
 use tokenizer::Tokenizer;
 
 pub trait StringParser: Send + Sync {
-    fn tokenize_str_and_stem(&self, input: &str) -> Result<Vec<(String, Vec<String>)>>;
+    fn tokenize_str_and_stem(&self, input: &str) -> Result<Vec<(String, Option<String>)>>;
 }
 
 pub struct TextParser {
@@ -123,25 +123,25 @@ impl TextParser {
         self.tokenizer.tokenize(input).collect()
     }
 
-    pub fn tokenize_and_stem(&self, input: &str) -> Vec<(String, Vec<String>)> {
+    pub fn tokenize_and_stem(&self, input: &str) -> Vec<(String, Option<String>)> {
         self.tokenizer
             .tokenize(input)
             .map(move |token| match &self.stemmer {
                 Some(stemmer) => {
                     let stemmed = stemmer.stem(&token).to_string();
                     if stemmed == token {
-                        return (token, vec![]);
+                        return (token, None);
                     }
-                    (token, vec![stemmed])
+                    (token, Some(stemmed))
                 }
-                None => (token, vec![]),
+                None => (token, None),
             })
             .collect()
     }
 }
 
 impl StringParser for TextParser {
-    fn tokenize_str_and_stem(&self, input: &str) -> Result<Vec<(String, Vec<String>)>> {
+    fn tokenize_str_and_stem(&self, input: &str) -> Result<Vec<(String, Option<String>)>> {
         Ok(self.tokenize_and_stem(input))
     }
 }
@@ -198,16 +198,16 @@ mod tests {
         let output = parser.tokenize_and_stem("Hello, world!");
         assert_eq!(
             output,
-            vec![("hello".to_string(), vec![]), ("world".to_string(), vec![])]
+            vec![("hello".to_string(), None), ("world".to_string(), None)]
         );
 
         let output = parser.tokenize_and_stem("Hello, world! fruitlessly");
         assert_eq!(
             output,
             vec![
-                ("hello".to_string(), vec![]),
-                ("world".to_string(), vec![]),
-                ("fruitlessly".to_string(), vec!["fruitless".to_string()])
+                ("hello".to_string(), None),
+                ("world".to_string(), None),
+                ("fruitlessly".to_string(), Some("fruitless".to_string()))
             ]
         );
     }
@@ -220,14 +220,14 @@ mod tests {
         let output = parser.tokenize_and_stem(t);
         assert_eq!(
             output,
-            vec![("avvocato".to_string(), vec!["avvoc".to_string()])]
+            vec![("avvocato".to_string(), Some("avvoc".to_string()))]
         );
 
         let t = "avvocata";
         let output = parser.tokenize_and_stem(t);
         assert_eq!(
             output,
-            vec![("avvocata".to_string(), vec!["avvoc".to_string()])]
+            vec![("avvocata".to_string(), Some("avvoc".to_string()))]
         );
     }
 }
