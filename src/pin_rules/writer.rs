@@ -215,6 +215,54 @@ mod pin_rules_tests {
     }
 
     #[tokio::test]
+    async fn test_commit_pin_rules() {
+        let base_dir = generate_new_path();
+        let mut writer = PinRulesWriter::empty().unwrap();
+
+        writer
+            .insert_pin_rule(PinRule {
+                id: "test-rule-1".to_string(),
+                conditions: vec![],
+                consequence: Consequence { promote: vec![] },
+            })
+            .await
+            .expect("Failed to insert rule");
+
+        let rules = writer.list_pin_rules();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].id, "test-rule-1");
+
+        writer
+            .commit(base_dir.clone())
+            .expect("Failed to commit rules");
+
+        let mut writer =
+            PinRulesWriter::try_new(base_dir.clone()).expect("Failed to create PinRulesWriter");
+
+        let rules = writer.list_pin_rules();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].id, "test-rule-1");
+
+        writer
+            .delete_pin_rule("test-rule-1")
+            .await
+            .expect("Failed to delete rule");
+
+        let rules = writer.list_pin_rules();
+        assert_eq!(rules.len(), 0);
+
+        writer
+            .commit(base_dir.clone())
+            .expect("Failed to commit rules");
+
+        let writer =
+            PinRulesWriter::try_new(base_dir.clone()).expect("Failed to create PinRulesWriter");
+
+        let rules = writer.list_pin_rules();
+        assert_eq!(rules.len(), 0);
+    }
+
+    #[tokio::test]
     async fn test_has_pending_changes() {
         let path = generate_new_path();
 
