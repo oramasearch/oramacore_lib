@@ -8,29 +8,29 @@ use thiserror::Error;
 use tracing::error;
 
 #[derive(Error, Debug)]
-pub enum ShelfWriterError {
+pub enum ShelvesWriterError {
     #[error("Cannot perform operation on FS: {0:?}")]
     FSError(#[from] std::io::Error),
     #[error("Unknown error: {0:?}")]
     Generic(#[from] anyhow::Error),
 }
 
-pub struct ShelfWriter {
-    shelf: Vec<Shelf<String>>,
+pub struct ShelvesWriter {
+    shelves: Vec<Shelf<String>>,
     shelf_ids_to_delete: Vec<ShelfId>,
     has_uncommitted_changes: bool,
 }
 
-impl ShelfWriter {
-    pub fn empty() -> Result<Self, ShelfWriterError> {
+impl ShelvesWriter {
+    pub fn empty() -> Result<Self, ShelvesWriterError> {
         Ok(Self {
-            shelf: Vec::new(),
+            shelves: Vec::new(),
             shelf_ids_to_delete: Vec::new(),
             has_uncommitted_changes: false,
         })
     }
 
-    pub fn try_new(data_dir: PathBuf) -> Result<Self, ShelfWriterError> {
+    pub fn try_new(data_dir: PathBuf) -> Result<Self, ShelvesWriterError> {
         create_if_not_exists(&data_dir)?;
 
         let dir = std::fs::read_dir(data_dir).context("Cannot read dir")?;
@@ -53,16 +53,16 @@ impl ShelfWriter {
         }
 
         Ok(Self {
-            shelf: shelves,
+            shelves,
             shelf_ids_to_delete: Vec::new(),
             has_uncommitted_changes: false,
         })
     }
 
-    pub fn commit(&mut self, data_dir: PathBuf) -> Result<(), ShelfWriterError> {
+    pub fn commit(&mut self, data_dir: PathBuf) -> Result<(), ShelvesWriterError> {
         create_if_not_exists(&data_dir)?;
 
-        for s in &self.shelf {
+        for s in &self.shelves {
             let file_path = data_dir.join(get_shelf_file_name(s.id.as_str()));
             BufferedFile::create_or_overwrite(file_path)
                 .context("Cannot create file")?
@@ -80,17 +80,17 @@ impl ShelfWriter {
         Ok(())
     }
 
-    pub fn insert_shelf(&mut self, shelf: Shelf<String>) -> Result<(), ShelfWriterError> {
-        self.shelf.retain(|r| r.id != shelf.id);
+    pub fn insert_shelf(&mut self, shelf: Shelf<String>) -> Result<(), ShelvesWriterError> {
+        self.shelves.retain(|r| r.id != shelf.id);
         self.shelf_ids_to_delete.retain(|id| id != &shelf.id);
-        self.shelf.push(shelf);
+        self.shelves.push(shelf);
         self.has_uncommitted_changes = true;
 
         Ok(())
     }
 
-    pub fn delete_shelf(&mut self, id: ShelfId) -> Result<(), ShelfWriterError> {
-        self.shelf.retain(|r| r.id != id);
+    pub fn delete_shelf(&mut self, id: ShelfId) -> Result<(), ShelvesWriterError> {
+        self.shelves.retain(|r| r.id != id);
         self.shelf_ids_to_delete.push(id);
         self.has_uncommitted_changes = true;
 
@@ -98,7 +98,7 @@ impl ShelfWriter {
     }
 
     pub fn list_shelves(&self) -> &[Shelf<String>] {
-        &self.shelf
+        &self.shelves
     }
 
     pub fn has_pending_changes(&self) -> bool {
@@ -115,14 +115,13 @@ mod shelf_tests {
     async fn test_simple() {
         let path = generate_new_path();
 
-        let mut writer = ShelfWriter::empty().unwrap();
+        let mut writer = ShelvesWriter::empty().unwrap();
 
         writer
             .insert_shelf(Shelf {
                 id: ShelfId::try_new("test-shelf-1").unwrap(),
                 documents: vec!["doc1".to_string(), "doc2".to_string()],
             })
-            .await
             .unwrap();
 
         writer
@@ -130,7 +129,6 @@ mod shelf_tests {
                 id: ShelfId::try_new("test-shelf-2").unwrap(),
                 documents: vec!["doc3".to_string()],
             })
-            .await
             .unwrap();
 
         let shelves = writer.list_shelves();
@@ -140,7 +138,6 @@ mod shelf_tests {
 
         writer
             .delete_shelf(ShelfId::try_new("test-shelf-1").unwrap())
-            .await
             .unwrap();
 
         let shelves = writer.list_shelves();
@@ -149,7 +146,7 @@ mod shelf_tests {
 
         writer.commit(path.clone()).unwrap();
 
-        let writer = ShelfWriter::try_new(path).unwrap();
+        let writer = ShelvesWriter::try_new(path).unwrap();
 
         let shelves = writer.list_shelves();
         assert_eq!(shelves.len(), 1);
@@ -159,14 +156,13 @@ mod shelf_tests {
     #[tokio::test]
     async fn test_commit_shelves() {
         let base_dir = generate_new_path();
-        let mut writer = ShelfWriter::empty().unwrap();
+        let mut writer = ShelvesWriter::empty().unwrap();
 
         writer
             .insert_shelf(Shelf {
                 id: ShelfId::try_new("test-shelf-1").unwrap(),
                 documents: vec!["doc1".to_string()],
             })
-            .await
             .expect("Failed to insert shelf");
 
         let shelves = writer.list_shelves();
@@ -178,7 +174,7 @@ mod shelf_tests {
             .expect("Failed to commit shelves");
 
         let mut writer =
-            ShelfWriter::try_new(base_dir.clone()).expect("Failed to create ShelfWriter");
+            ShelvesWriter::try_new(base_dir.clone()).expect("Failed to create ShelfWriter");
 
         let shelves = writer.list_shelves();
         assert_eq!(shelves.len(), 1);
@@ -186,7 +182,6 @@ mod shelf_tests {
 
         writer
             .delete_shelf(ShelfId::try_new("test-shelf-1").unwrap())
-            .await
             .expect("Failed to delete shelf");
 
         let shelves = writer.list_shelves();
@@ -196,7 +191,8 @@ mod shelf_tests {
             .commit(base_dir.clone())
             .expect("Failed to commit shelves");
 
-        let writer = ShelfWriter::try_new(base_dir.clone()).expect("Failed to create ShelfWriter");
+        let writer =
+            ShelvesWriter::try_new(base_dir.clone()).expect("Failed to create ShelfWriter");
 
         let shelves = writer.list_shelves();
         assert_eq!(shelves.len(), 0);
@@ -206,7 +202,7 @@ mod shelf_tests {
     async fn test_has_pending_changes() {
         let path = generate_new_path();
 
-        let mut writer = ShelfWriter::empty().unwrap();
+        let mut writer = ShelvesWriter::empty().unwrap();
 
         assert!(!writer.has_pending_changes());
 
@@ -215,7 +211,6 @@ mod shelf_tests {
                 id: ShelfId::try_new("test-shelf-1").unwrap(),
                 documents: vec!["doc1".to_string()],
             })
-            .await
             .unwrap();
         assert!(writer.has_pending_changes());
 
@@ -224,7 +219,6 @@ mod shelf_tests {
 
         writer
             .delete_shelf(ShelfId::try_new("test-shelf-2").unwrap())
-            .await
             .unwrap();
         assert!(writer.has_pending_changes());
 

@@ -10,27 +10,27 @@ use super::op::ShelfOperation;
 use super::{Shelf, ShelfId};
 
 #[derive(Error, Debug)]
-pub enum ShelfReaderError {
+pub enum ShelvesReaderError {
     #[error("Io error {0:?}")]
     Io(std::io::Error),
     #[error("generic {0:?}")]
     Generic(#[from] anyhow::Error),
 }
 
-pub struct ShelfReader<DocumentId> {
+pub struct ShelvesReader<DocumentId> {
     shelves: Vec<Shelf<DocumentId>>,
-    shelf_names_to_delete: Vec<ShelfId>,
+    shelf_ids_to_delete: Vec<ShelfId>,
 }
 
-impl<DocumentId: Serialize + DeserializeOwned + Debug + Clone> ShelfReader<DocumentId> {
+impl<DocumentId: Serialize + DeserializeOwned + Debug + Clone> ShelvesReader<DocumentId> {
     pub fn empty() -> Self {
         Self {
             shelves: Vec::new(),
-            shelf_names_to_delete: Vec::new(),
+            shelf_ids_to_delete: Vec::new(),
         }
     }
 
-    pub fn try_new(data_dir: PathBuf) -> Result<Self, ShelfReaderError> {
+    pub fn try_new(data_dir: PathBuf) -> Result<Self, ShelvesReaderError> {
         create_if_not_exists(&data_dir)?;
 
         let shelves: Vec<_> = std::fs::read_dir(&data_dir)
@@ -50,26 +50,26 @@ impl<DocumentId: Serialize + DeserializeOwned + Debug + Clone> ShelfReader<Docum
 
         Ok(Self {
             shelves,
-            shelf_names_to_delete: Vec::new(),
+            shelf_ids_to_delete: Vec::new(),
         })
     }
 
-    pub fn update(&mut self, op: ShelfOperation<DocumentId>) -> Result<(), ShelfReaderError> {
+    pub fn update(&mut self, op: ShelfOperation<DocumentId>) -> Result<(), ShelvesReaderError> {
         match op {
             ShelfOperation::Insert(shelf) => {
-                self.shelf_names_to_delete.retain(|name| name != &shelf.id);
+                self.shelf_ids_to_delete.retain(|name| name != &shelf.id);
                 self.shelves.retain(|s| s.id != shelf.id);
                 self.shelves.push(shelf);
             }
             ShelfOperation::Delete(shelf_name) => {
                 self.shelves.retain(|s| s.id != shelf_name);
-                self.shelf_names_to_delete.push(shelf_name);
+                self.shelf_ids_to_delete.push(shelf_name);
             }
         }
         Ok(())
     }
 
-    pub fn commit(&mut self, data_dir: PathBuf) -> Result<(), ShelfReaderError> {
+    pub fn commit(&mut self, data_dir: PathBuf) -> Result<(), ShelvesReaderError> {
         create_if_not_exists(&data_dir)?;
 
         for shelf in &self.shelves {
@@ -80,7 +80,7 @@ impl<DocumentId: Serialize + DeserializeOwned + Debug + Clone> ShelfReader<Docum
                 .context("Cannot write shelf to file")?;
         }
 
-        for shelf_name_to_remove in self.shelf_names_to_delete.drain(..) {
+        for shelf_name_to_remove in self.shelf_ids_to_delete.drain(..) {
             let file_path = data_dir.join(get_shelf_file_name(shelf_name_to_remove.as_str()));
             remove_shelf_file(file_path);
         }
@@ -107,7 +107,7 @@ mod shelf_reader_tests {
 
     #[test]
     fn test_shelf_reader_empty() {
-        let reader: ShelfReader<String> = ShelfReader::empty();
+        let reader: ShelvesReader<String> = ShelvesReader::empty();
         let names = reader.get_shelf_names();
         assert_eq!(names.len(), 0);
         let shelves = reader.list_shelves();
@@ -117,7 +117,7 @@ mod shelf_reader_tests {
     #[test]
     fn test_commit_shelves() {
         let base_dir = generate_new_path();
-        let mut reader: ShelfReader<String> = ShelfReader::empty();
+        let mut reader: ShelvesReader<String> = ShelvesReader::empty();
 
         reader
             .update(ShelfOperation::Insert(Shelf {
@@ -135,8 +135,8 @@ mod shelf_reader_tests {
             .commit(base_dir.clone())
             .expect("Failed to commit shelves");
 
-        let mut reader: ShelfReader<String> =
-            ShelfReader::try_new(base_dir.clone()).expect("Failed to create ShelfReader");
+        let mut reader: ShelvesReader<String> =
+            ShelvesReader::try_new(base_dir.clone()).expect("Failed to create ShelfReader");
 
         let shelves = reader.list_shelves();
         assert_eq!(shelves.len(), 1);
@@ -156,8 +156,8 @@ mod shelf_reader_tests {
             .commit(base_dir.clone())
             .expect("Failed to commit shelves");
 
-        let reader: ShelfReader<String> =
-            ShelfReader::try_new(base_dir.clone()).expect("Failed to create ShelfReader");
+        let reader: ShelvesReader<String> =
+            ShelvesReader::try_new(base_dir.clone()).expect("Failed to create ShelfReader");
 
         let shelves = reader.list_shelves();
         assert_eq!(shelves.len(), 0);
@@ -165,7 +165,7 @@ mod shelf_reader_tests {
 
     #[test]
     fn test_get_shelf() {
-        let mut reader: ShelfReader<usize> = ShelfReader::empty();
+        let mut reader: ShelvesReader<usize> = ShelvesReader::empty();
 
         reader
             .update(ShelfOperation::Insert(Shelf {
@@ -195,7 +195,7 @@ mod shelf_reader_tests {
 
     #[test]
     fn test_update_existing_shelf() {
-        let mut reader: ShelfReader<String> = ShelfReader::empty();
+        let mut reader: ShelvesReader<String> = ShelvesReader::empty();
 
         reader
             .update(ShelfOperation::Insert(Shelf {
@@ -225,7 +225,7 @@ mod shelf_reader_tests {
 
     #[test]
     fn test_get_shelf_names() {
-        let mut reader: ShelfReader<usize> = ShelfReader::empty();
+        let mut reader: ShelvesReader<usize> = ShelvesReader::empty();
 
         reader
             .update(ShelfOperation::Insert(Shelf {
@@ -260,7 +260,7 @@ mod shelf_reader_tests {
     #[test]
     fn test_delete_shelf_prevents_deletion_on_reinsert() {
         let base_dir = generate_new_path();
-        let mut reader: ShelfReader<String> = ShelfReader::empty();
+        let mut reader: ShelvesReader<String> = ShelvesReader::empty();
 
         reader
             .update(ShelfOperation::Insert(Shelf {
@@ -273,8 +273,8 @@ mod shelf_reader_tests {
             .commit(base_dir.clone())
             .expect("Failed to commit shelves");
 
-        let mut reader: ShelfReader<String> =
-            ShelfReader::try_new(base_dir.clone()).expect("Failed to create ShelfReader");
+        let mut reader: ShelvesReader<String> =
+            ShelvesReader::try_new(base_dir.clone()).expect("Failed to create ShelfReader");
 
         // Mark for deletion
         reader
@@ -295,8 +295,8 @@ mod shelf_reader_tests {
             .commit(base_dir.clone())
             .expect("Failed to commit shelves");
 
-        let reader: ShelfReader<String> =
-            ShelfReader::try_new(base_dir.clone()).expect("Failed to create ShelfReader");
+        let reader: ShelvesReader<String> =
+            ShelvesReader::try_new(base_dir.clone()).expect("Failed to create ShelfReader");
 
         let shelves = reader.list_shelves();
         assert_eq!(shelves.len(), 1);
@@ -306,7 +306,7 @@ mod shelf_reader_tests {
     #[test]
     fn test_multiple_shelves_persistence() {
         let base_dir = generate_new_path();
-        let mut reader: ShelfReader<usize> = ShelfReader::empty();
+        let mut reader: ShelvesReader<usize> = ShelvesReader::empty();
 
         // Insert multiple shelves
         for i in 0..5 {
@@ -322,8 +322,8 @@ mod shelf_reader_tests {
             .commit(base_dir.clone())
             .expect("Failed to commit shelves");
 
-        let reader: ShelfReader<usize> =
-            ShelfReader::try_new(base_dir.clone()).expect("Failed to create ShelfReader");
+        let reader: ShelvesReader<usize> =
+            ShelvesReader::try_new(base_dir.clone()).expect("Failed to create ShelfReader");
 
         let shelves = reader.list_shelves();
         assert_eq!(shelves.len(), 5);
