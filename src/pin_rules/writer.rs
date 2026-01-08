@@ -1,4 +1,5 @@
 use super::PinRule;
+use super::file_util::get_rule_file_name;
 use crate::fs::*;
 use crate::pin_rules::file_util::{is_rule_file, remove_rule_file};
 use anyhow::Context;
@@ -18,6 +19,7 @@ pub enum PinRulesWriterError {
 pub struct PinRulesWriter {
     rules: Vec<PinRule<String>>,
     rule_ids_to_delete: Vec<String>,
+    has_uncommitted_changes: bool,
 }
 
 impl PinRulesWriter {
@@ -25,6 +27,7 @@ impl PinRulesWriter {
         Ok(Self {
             rules: Vec::new(),
             rule_ids_to_delete: Vec::new(),
+            has_uncommitted_changes: false,
         })
     }
 
@@ -53,6 +56,7 @@ impl PinRulesWriter {
         Ok(Self {
             rules,
             rule_ids_to_delete: Vec::new(),
+            has_uncommitted_changes: false,
         })
     }
 
@@ -60,17 +64,19 @@ impl PinRulesWriter {
         create_if_not_exists(&data_dir)?;
 
         for rule in &self.rules {
-            let p = data_dir.join(format!("{}.rule", rule.id));
-            BufferedFile::create_or_overwrite(p)
-                .context("Cannot open file")?
+            let file_path = data_dir.join(get_rule_file_name(&rule.id));
+            BufferedFile::create_or_overwrite(file_path)
+                .context("Cannot create file")?
                 .write_json_data(rule)
-                .context("Cannot write to file")?;
+                .context("Cannot write rule to file")?;
         }
 
         for rule_id_to_remove in self.rule_ids_to_delete.drain(..) {
-            let file_path = data_dir.join(format!("{rule_id_to_remove}.rule"));
+            let file_path = data_dir.join(get_rule_file_name(&rule_id_to_remove));
             remove_rule_file(file_path);
         }
+
+        self.has_uncommitted_changes = false;
 
         Ok(())
     }
@@ -82,6 +88,7 @@ impl PinRulesWriter {
         self.rules.retain(|r| r.id != rule.id);
         self.rule_ids_to_delete.retain(|id| id != &rule.id);
         self.rules.push(rule);
+        self.has_uncommitted_changes = true;
 
         Ok(())
     }
@@ -89,6 +96,7 @@ impl PinRulesWriter {
     pub async fn delete_pin_rule(&mut self, id: &str) -> Result<(), PinRulesWriterError> {
         self.rules.retain(|r| r.id != id);
         self.rule_ids_to_delete.push(id.to_string());
+        self.has_uncommitted_changes = true;
 
         Ok(())
     }
@@ -128,6 +136,10 @@ impl PinRulesWriter {
     pub fn get_by_id(&self, rule_id: &str) -> Option<&PinRule<String>> {
         let rules = self.list_pin_rules();
         rules.iter().find(|r| r.id == rule_id)
+    }
+
+    pub fn has_pending_changes(&self) -> bool {
+        self.has_uncommitted_changes
     }
 
     pub fn get_matching_rules_ids<'a, 's, 'd>(
@@ -200,5 +212,81 @@ mod pin_rules_tests {
         let rules = writer.list_pin_rules();
         assert_eq!(rules.len(), 1);
         assert_eq!(rules[0].id, "test-rule-2");
+    }
+
+    #[tokio::test]
+    async fn test_commit_pin_rules() {
+        let base_dir = generate_new_path();
+        let mut writer = PinRulesWriter::empty().unwrap();
+
+        writer
+            .insert_pin_rule(PinRule {
+                id: "test-rule-1".to_string(),
+                conditions: vec![],
+                consequence: Consequence { promote: vec![] },
+            })
+            .await
+            .expect("Failed to insert rule");
+
+        let rules = writer.list_pin_rules();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].id, "test-rule-1");
+
+        writer
+            .commit(base_dir.clone())
+            .expect("Failed to commit rules");
+
+        let mut writer =
+            PinRulesWriter::try_new(base_dir.clone()).expect("Failed to create PinRulesWriter");
+
+        let rules = writer.list_pin_rules();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].id, "test-rule-1");
+
+        writer
+            .delete_pin_rule("test-rule-1")
+            .await
+            .expect("Failed to delete rule");
+
+        let rules = writer.list_pin_rules();
+        assert_eq!(rules.len(), 0);
+
+        writer
+            .commit(base_dir.clone())
+            .expect("Failed to commit rules");
+
+        let writer =
+            PinRulesWriter::try_new(base_dir.clone()).expect("Failed to create PinRulesWriter");
+
+        let rules = writer.list_pin_rules();
+        assert_eq!(rules.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_has_pending_changes() {
+        let path = generate_new_path();
+
+        let mut writer = PinRulesWriter::empty().unwrap();
+
+        assert!(!writer.has_pending_changes());
+
+        writer
+            .insert_pin_rule(PinRule {
+                id: "test-rule-1".to_string(),
+                conditions: vec![],
+                consequence: Consequence { promote: vec![] },
+            })
+            .await
+            .unwrap();
+        assert!(writer.has_pending_changes());
+
+        writer.commit(path.clone()).unwrap();
+        assert!(!writer.has_pending_changes());
+
+        writer.delete_pin_rule("test-rule-2").await.unwrap();
+        assert!(writer.has_pending_changes());
+
+        writer.commit(path.clone()).unwrap();
+        assert!(!writer.has_pending_changes());
     }
 }
