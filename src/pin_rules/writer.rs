@@ -81,10 +81,7 @@ impl PinRulesWriter {
         Ok(())
     }
 
-    pub async fn insert_pin_rule(
-        &mut self,
-        rule: PinRule<String>,
-    ) -> Result<(), PinRulesWriterError> {
+    pub fn insert_pin_rule(&mut self, rule: PinRule<String>) -> Result<(), PinRulesWriterError> {
         self.rules.retain(|r| r.id != rule.id);
         self.rule_ids_to_delete.retain(|id| id != &rule.id);
         self.rules.push(rule);
@@ -93,7 +90,7 @@ impl PinRulesWriter {
         Ok(())
     }
 
-    pub async fn delete_pin_rule(&mut self, id: &str) -> Result<(), PinRulesWriterError> {
+    pub fn delete_pin_rule(&mut self, id: &str) -> Result<(), PinRulesWriterError> {
         self.rules.retain(|r| r.id != id);
         self.rule_ids_to_delete.push(id.to_string());
         self.has_uncommitted_changes = true;
@@ -182,7 +179,6 @@ mod pin_rules_tests {
                 conditions: vec![],
                 consequence: Consequence { promote: vec![] },
             })
-            .await
             .unwrap();
 
         writer
@@ -191,7 +187,6 @@ mod pin_rules_tests {
                 conditions: vec![],
                 consequence: Consequence { promote: vec![] },
             })
-            .await
             .unwrap();
 
         let rules = writer.list_pin_rules();
@@ -199,7 +194,7 @@ mod pin_rules_tests {
         assert_eq!(rules[0].id, "test-rule-1");
         assert_eq!(rules[1].id, "test-rule-2");
 
-        writer.delete_pin_rule("test-rule-1").await.unwrap();
+        writer.delete_pin_rule("test-rule-1").unwrap();
 
         let rules = writer.list_pin_rules();
         assert_eq!(rules.len(), 1);
@@ -225,7 +220,6 @@ mod pin_rules_tests {
                 conditions: vec![],
                 consequence: Consequence { promote: vec![] },
             })
-            .await
             .expect("Failed to insert rule");
 
         let rules = writer.list_pin_rules();
@@ -245,7 +239,6 @@ mod pin_rules_tests {
 
         writer
             .delete_pin_rule("test-rule-1")
-            .await
             .expect("Failed to delete rule");
 
         let rules = writer.list_pin_rules();
@@ -276,14 +269,13 @@ mod pin_rules_tests {
                 conditions: vec![],
                 consequence: Consequence { promote: vec![] },
             })
-            .await
             .unwrap();
         assert!(writer.has_pending_changes());
 
         writer.commit(path.clone()).unwrap();
         assert!(!writer.has_pending_changes());
 
-        writer.delete_pin_rule("test-rule-2").await.unwrap();
+        writer.delete_pin_rule("test-rule-2").unwrap();
         assert!(writer.has_pending_changes());
 
         writer.commit(path.clone()).unwrap();
