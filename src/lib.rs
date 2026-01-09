@@ -9,4 +9,4 @@ pub mod hnsw2;
 pub mod hook_storage;
 pub mod nlp;
 pub mod pin_rules;
-pub mod shelf;
+pub mod shelves;
