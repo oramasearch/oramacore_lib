@@ -104,6 +104,29 @@ impl ShelvesWriter {
     pub fn has_pending_changes(&self) -> bool {
         self.has_uncommitted_changes
     }
+
+    /// Get the IDs of all shelves that contain a given document ID string.
+    /// This is used to track which shelves need to be updated when a document changes.
+    pub fn get_matching_shelves_ids<'a, 's, 'd>(
+        &'s self,
+        doc_id_str: &'d str,
+    ) -> impl Iterator<Item = ShelfId> + 'a
+    where
+        's: 'a,
+        'd: 'a,
+    {
+        let shelves = self.list_shelves();
+
+        shelves
+            .iter()
+            .filter(move |shelf| shelf.documents.iter().any(|doc_id| doc_id == doc_id_str))
+            .map(|shelf| shelf.id.clone())
+    }
+
+    pub fn get_by_id(&self, shelf_id: &ShelfId) -> Option<&Shelf<String>> {
+        let shelves = self.list_shelves();
+        shelves.iter().find(|s| s.id == *shelf_id)
+    }
 }
 
 #[cfg(test)]
