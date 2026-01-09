@@ -11,7 +11,7 @@ pub struct PlainFilterResult<Id> {
 
 impl<Id: DocId> PlainFilterResult<Id> {
     pub fn new(expected_items: u64) -> Self {
-        let filter = FilterBuilder::new(expected_items, 0.01).build_bloom_filter();
+        let filter = FilterBuilder::new(expected_items, 0.0001).build_bloom_filter();
 
         PlainFilterResult {
             filter,
@@ -20,7 +20,7 @@ impl<Id: DocId> PlainFilterResult<Id> {
     }
 
     pub fn ones(expected_items: u64) -> Self {
-        let filter = FilterBuilder::new(expected_items, 0.01).build_bloom_filter();
+        let filter = FilterBuilder::new(expected_items, 0.0001).build_bloom_filter();
 
         PlainFilterResult {
             filter,
@@ -29,7 +29,7 @@ impl<Id: DocId> PlainFilterResult<Id> {
     }
 
     pub fn from_iter<I: Iterator<Item = Id>>(expected_items: u64, iter: I) -> Self {
-        let filter = FilterBuilder::new(expected_items, 0.01).build_bloom_filter();
+        let filter = FilterBuilder::new(expected_items, 0.0001).build_bloom_filter();
 
         let mut s = Self {
             filter,
