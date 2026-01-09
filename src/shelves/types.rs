@@ -27,7 +27,7 @@ impl ShelfId {
         }
         if !id_str
             .chars()
-            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '$')
         {
             return Err(ShelfIdError::InvalidCharacters);
         }
@@ -74,6 +74,7 @@ mod tests {
         assert!(ShelfId::try_new("my-shelf").is_ok());
         assert!(ShelfId::try_new("ab").is_ok());
         assert!(ShelfId::try_new("ABC-123").is_ok());
+        assert!(ShelfId::try_new("ABC-123$").is_ok());
 
         assert_eq!(ShelfId::try_new("a").unwrap_err(), ShelfIdError::TooShort);
         assert_eq!(
