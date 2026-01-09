@@ -50,7 +50,7 @@ impl fmt::Display for ShelfId {
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Shelf<DocId> {
     pub id: ShelfId,
-    pub documents: Vec<DocId>,
+    pub doc_ids: Vec<DocId>,
 }
 
 impl<DocId> Shelf<DocId> {
@@ -60,7 +60,7 @@ impl<DocId> Shelf<DocId> {
     {
         Shelf {
             id: self.id,
-            documents: self.documents.into_iter().map(f).collect(),
+            doc_ids: self.doc_ids.into_iter().map(f).collect(),
         }
     }
 }

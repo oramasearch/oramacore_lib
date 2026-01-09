@@ -119,7 +119,7 @@ impl ShelvesWriter {
 
         shelves
             .iter()
-            .filter(move |shelf| shelf.documents.iter().any(|doc_id| doc_id == doc_id_str))
+            .filter(move |shelf| shelf.doc_ids.iter().any(|doc_id| doc_id == doc_id_str))
             .map(|shelf| shelf.id.clone())
     }
 
@@ -143,14 +143,14 @@ mod shelf_tests {
         writer
             .insert_shelf(Shelf {
                 id: ShelfId::try_new("test-shelf-1").unwrap(),
-                documents: vec!["doc1".to_string(), "doc2".to_string()],
+                doc_ids: vec!["doc1".to_string(), "doc2".to_string()],
             })
             .unwrap();
 
         writer
             .insert_shelf(Shelf {
                 id: ShelfId::try_new("test-shelf-2").unwrap(),
-                documents: vec!["doc3".to_string()],
+                doc_ids: vec!["doc3".to_string()],
             })
             .unwrap();
 
@@ -184,7 +184,7 @@ mod shelf_tests {
         writer
             .insert_shelf(Shelf {
                 id: ShelfId::try_new("test-shelf-1").unwrap(),
-                documents: vec!["doc1".to_string()],
+                doc_ids: vec!["doc1".to_string()],
             })
             .expect("Failed to insert shelf");
 
@@ -232,7 +232,7 @@ mod shelf_tests {
         writer
             .insert_shelf(Shelf {
                 id: ShelfId::try_new("test-shelf-1").unwrap(),
-                documents: vec!["doc1".to_string()],
+                doc_ids: vec!["doc1".to_string()],
             })
             .unwrap();
         assert!(writer.has_pending_changes());

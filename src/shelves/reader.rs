@@ -116,14 +116,14 @@ mod shelf_reader_tests {
         reader
             .update(ShelfOperation::Insert(Shelf {
                 id: ShelfId::try_new("test-shelf-1").unwrap(),
-                documents: vec!["doc1".to_string(), "doc2".to_string()],
+                doc_ids: vec!["doc1".to_string(), "doc2".to_string()],
             }))
             .expect("Failed to insert shelf");
 
         let shelves = reader.list_shelves();
         assert_eq!(shelves.len(), 1);
         assert_eq!(shelves[0].id.as_str(), "test-shelf-1");
-        assert_eq!(shelves[0].documents.len(), 2);
+        assert_eq!(shelves[0].doc_ids.len(), 2);
 
         reader
             .commit(base_dir.clone())
@@ -135,7 +135,7 @@ mod shelf_reader_tests {
         let shelves = reader.list_shelves();
         assert_eq!(shelves.len(), 1);
         assert_eq!(shelves[0].id.as_str(), "test-shelf-1");
-        assert_eq!(shelves[0].documents.len(), 2);
+        assert_eq!(shelves[0].doc_ids.len(), 2);
 
         reader
             .update(ShelfOperation::Delete(
@@ -164,24 +164,24 @@ mod shelf_reader_tests {
         reader
             .update(ShelfOperation::Insert(Shelf {
                 id: ShelfId::try_new("test-shelf-1").unwrap(),
-                documents: vec![1, 2, 3],
+                doc_ids: vec![1, 2, 3],
             }))
             .expect("Failed to insert shelf");
 
         reader
             .update(ShelfOperation::Insert(Shelf {
                 id: ShelfId::try_new("test-shelf-2").unwrap(),
-                documents: vec![4, 5, 6],
+                doc_ids: vec![4, 5, 6],
             }))
             .expect("Failed to insert shelf");
 
         let shelf1 = reader.get_shelf(&ShelfId::try_new("test-shelf-1").unwrap());
         assert!(shelf1.is_some());
-        assert_eq!(shelf1.unwrap().documents, vec![1, 2, 3]);
+        assert_eq!(shelf1.unwrap().doc_ids, vec![1, 2, 3]);
 
         let shelf2 = reader.get_shelf(&ShelfId::try_new("test-shelf-2").unwrap());
         assert!(shelf2.is_some());
-        assert_eq!(shelf2.unwrap().documents, vec![4, 5, 6]);
+        assert_eq!(shelf2.unwrap().doc_ids, vec![4, 5, 6]);
 
         let shelf3 = reader.get_shelf(&ShelfId::try_new("non-existent").unwrap());
         assert!(shelf3.is_none());
@@ -194,27 +194,27 @@ mod shelf_reader_tests {
         reader
             .update(ShelfOperation::Insert(Shelf {
                 id: ShelfId::try_new("test-shelf").unwrap(),
-                documents: vec!["doc1".to_string()],
+                doc_ids: vec!["doc1".to_string()],
             }))
             .expect("Failed to insert shelf");
 
         let shelves = reader.list_shelves();
         assert_eq!(shelves.len(), 1);
-        assert_eq!(shelves[0].documents.len(), 1);
+        assert_eq!(shelves[0].doc_ids.len(), 1);
 
         // Update the same shelf with new documents
         reader
             .update(ShelfOperation::Insert(Shelf {
                 id: ShelfId::try_new("test-shelf").unwrap(),
-                documents: vec!["doc2".to_string(), "doc3".to_string()],
+                doc_ids: vec!["doc2".to_string(), "doc3".to_string()],
             }))
             .expect("Failed to update shelf");
 
         let shelves = reader.list_shelves();
         assert_eq!(shelves.len(), 1);
-        assert_eq!(shelves[0].documents.len(), 2);
-        assert_eq!(shelves[0].documents[0], "doc2");
-        assert_eq!(shelves[0].documents[1], "doc3");
+        assert_eq!(shelves[0].doc_ids.len(), 2);
+        assert_eq!(shelves[0].doc_ids[0], "doc2");
+        assert_eq!(shelves[0].doc_ids[1], "doc3");
     }
 
     #[test]
@@ -225,7 +225,7 @@ mod shelf_reader_tests {
         reader
             .update(ShelfOperation::Insert(Shelf {
                 id: ShelfId::try_new("test-shelf").unwrap(),
-                documents: vec!["doc1".to_string()],
+                doc_ids: vec!["doc1".to_string()],
             }))
             .expect("Failed to insert shelf");
 
@@ -247,7 +247,7 @@ mod shelf_reader_tests {
         reader
             .update(ShelfOperation::Insert(Shelf {
                 id: ShelfId::try_new("test-shelf").unwrap(),
-                documents: vec!["doc2".to_string()],
+                doc_ids: vec!["doc2".to_string()],
             }))
             .expect("Failed to re-insert shelf");
 
@@ -260,7 +260,7 @@ mod shelf_reader_tests {
 
         let shelves = reader.list_shelves();
         assert_eq!(shelves.len(), 1);
-        assert_eq!(shelves[0].documents[0], "doc2");
+        assert_eq!(shelves[0].doc_ids[0], "doc2");
     }
 
     #[test]
@@ -273,7 +273,7 @@ mod shelf_reader_tests {
             reader
                 .update(ShelfOperation::Insert(Shelf {
                     id: ShelfId::try_new(format!("shelf-{i}")).unwrap(),
-                    documents: vec![i, i + 10, i + 20],
+                    doc_ids: vec![i, i + 10, i + 20],
                 }))
                 .expect("Failed to insert shelf");
         }
@@ -292,7 +292,7 @@ mod shelf_reader_tests {
             let shelf_name = ShelfId::try_new(format!("shelf-{i}")).unwrap();
             let shelf = reader.get_shelf(&shelf_name);
             assert!(shelf.is_some());
-            assert_eq!(shelf.unwrap().documents.len(), 3);
+            assert_eq!(shelf.unwrap().doc_ids.len(), 3);
         }
     }
 }
