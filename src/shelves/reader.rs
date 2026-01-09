@@ -88,10 +88,6 @@ impl<DocumentId: Serialize + DeserializeOwned + Debug + Clone> ShelvesReader<Doc
         Ok(())
     }
 
-    pub fn get_shelf_names(&self) -> Vec<ShelfId> {
-        self.shelves.iter().map(|s| s.id.clone()).collect()
-    }
-
     pub fn get_shelf(&self, name: &ShelfId) -> Option<&Shelf<DocumentId>> {
         self.shelves.iter().find(|s| &s.id == name)
     }
@@ -108,8 +104,6 @@ mod shelf_reader_tests {
     #[test]
     fn test_shelf_reader_empty() {
         let reader: ShelvesReader<String> = ShelvesReader::empty();
-        let names = reader.get_shelf_names();
-        assert_eq!(names.len(), 0);
         let shelves = reader.list_shelves();
         assert!(shelves.is_empty());
     }
@@ -221,40 +215,6 @@ mod shelf_reader_tests {
         assert_eq!(shelves[0].documents.len(), 2);
         assert_eq!(shelves[0].documents[0], "doc2");
         assert_eq!(shelves[0].documents[1], "doc3");
-    }
-
-    #[test]
-    fn test_get_shelf_names() {
-        let mut reader: ShelvesReader<usize> = ShelvesReader::empty();
-
-        reader
-            .update(ShelfOperation::Insert(Shelf {
-                id: ShelfId::try_new("shelf-a").unwrap(),
-                documents: vec![1],
-            }))
-            .expect("Failed to insert shelf");
-
-        reader
-            .update(ShelfOperation::Insert(Shelf {
-                id: ShelfId::try_new("shelf-b").unwrap(),
-                documents: vec![2],
-            }))
-            .expect("Failed to insert shelf");
-
-        reader
-            .update(ShelfOperation::Insert(Shelf {
-                id: ShelfId::try_new("shelf-c").unwrap(),
-                documents: vec![3],
-            }))
-            .expect("Failed to insert shelf");
-
-        let names = reader.get_shelf_names();
-        assert_eq!(names.len(), 3);
-
-        let name_strs: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
-        assert!(name_strs.contains(&"shelf-a"));
-        assert!(name_strs.contains(&"shelf-b"));
-        assert!(name_strs.contains(&"shelf-c"));
     }
 
     #[test]
