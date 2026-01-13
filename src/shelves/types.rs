@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::fmt;
 use thiserror::Error;
 
@@ -8,12 +8,15 @@ pub enum ShelfIdError {
     TooShort,
     #[error("Shelf id must be at most 64 characters")]
     TooLong,
-    #[error("Shelf id must contain only alphanumeric characters, dashes or underscores")]
+    #[error(
+        "Shelf id must contain only alphanumeric characters, dashes, underscores or dollars signs"
+    )]
     InvalidCharacters,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ShelfId(String);
+
 impl ShelfId {
     pub fn try_new<A: AsRef<str>>(id: A) -> Result<Self, ShelfIdError> {
         let id_str = id.as_ref();
@@ -43,6 +46,25 @@ impl ShelfId {
 impl fmt::Display for ShelfId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl Serialize for ShelfId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ShelfId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        ShelfId::try_new(s).map_err(de::Error::custom)
     }
 }
 
@@ -94,5 +116,17 @@ mod tests {
             ShelfId::try_new("my.shelf").unwrap_err(),
             ShelfIdError::InvalidCharacters
         );
+    }
+
+    #[test]
+    fn test_shelf_deserialization_validation() {
+        let json = r#"{"id": "valid-shelf", "doc_ids": ["doc1", "doc2"]}"#;
+        assert!(serde_json::from_str::<Shelf<String>>(json).is_ok());
+
+        let json_invalid = r#"{"id": "a", "doc_ids": ["doc1", "doc2"]}"#;
+        assert!(serde_json::from_str::<Shelf<String>>(json_invalid).is_err());
+
+        let json_invalid_chars = r#"{"id": "invalid shelf!", "doc_ids": ["doc1", "doc2"]}"#;
+        assert!(serde_json::from_str::<Shelf<String>>(json_invalid_chars).is_err());
     }
 }
