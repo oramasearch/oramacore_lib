@@ -2,6 +2,6 @@
 
 This repository contains some internal structures and utilities used by OramaCore. Don't use it directly unless you know what you're doing.
 
-## License
+##  License
 
 See [LICENSE](./LICENSE) file for details.
