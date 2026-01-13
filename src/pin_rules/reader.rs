@@ -103,6 +103,15 @@ impl<DocumentId: Serialize + DeserializeOwned + Debug + Clone> PinRulesReader<Do
         Ok(())
     }
 
+    pub fn list_pin_rules(&self) -> &[PinRule<DocumentId>] {
+        &self.rules
+    }
+
+    pub fn get_by_id(&self, rule_id: &str) -> Option<&PinRule<DocumentId>> {
+        let rules = self.list_pin_rules();
+        rules.iter().find(|r| r.id == rule_id)
+    }
+
     pub fn get_rule_ids(&self) -> Vec<String> {
         self.rules.iter().map(|r| r.id.clone()).collect()
     }
