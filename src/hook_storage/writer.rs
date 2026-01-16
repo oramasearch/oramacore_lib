@@ -148,7 +148,11 @@ impl HookWriter {
     pub fn list_hooks(&self) -> Result<Vec<(HookType, Option<String>)>, HookWriterError> {
         // For each HookType variant, check if the corresponding file exists
         // Currently only BeforeRetrieval exists, but this is future-proofed
-        let types = vec![HookType::BeforeRetrieval, HookType::BeforeAnswer];
+        let types = vec![
+            HookType::BeforeRetrieval,
+            HookType::BeforeAnswer,
+            HookType::BeforeSearch,
+        ];
 
         let mut ret = Vec::with_capacity(types.len());
         for hook_type in types {
@@ -191,9 +195,10 @@ mod tests {
 
         // Initially, no hook file should exist
         let hooks = writer.list_hooks().expect("list_hooks failed");
-        assert_eq!(hooks.len(), 2);
+        assert_eq!(hooks.len(), 3);
         assert!(hooks[0].1.is_none());
         assert!(hooks[1].1.is_none());
+        assert!(hooks[2].1.is_none());
 
         // Insert a hook
         let code = r#"
@@ -208,9 +213,10 @@ export default { beforeRetrieval }
 
         // list_hooks should return the code
         let hooks = writer.list_hooks().expect("list_hooks failed");
-        assert_eq!(hooks.len(), 2);
+        assert_eq!(hooks.len(), 3);
         assert_eq!(hooks[0].1.as_deref(), Some(code.as_str()));
         assert!(hooks[1].1.is_none());
+        assert!(hooks[2].1.is_none());
 
         // Delete the hook
         writer
@@ -220,9 +226,10 @@ export default { beforeRetrieval }
 
         // list_hooks should return None for content
         let hooks = writer.list_hooks().expect("list_hooks failed");
-        assert_eq!(hooks.len(), 2);
+        assert_eq!(hooks.len(), 3);
         assert!(hooks[0].1.is_none());
         assert!(hooks[1].1.is_none());
+        assert!(hooks[2].1.is_none());
 
         // Assert closure invocations at the end
         let ops = ops.read().unwrap();

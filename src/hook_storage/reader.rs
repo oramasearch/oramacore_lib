@@ -100,6 +100,42 @@ impl HookReader {
             }
         }
 
+        if status.before_answer.1 {
+            let file_path = self.data_dir.join(HookType::BeforeAnswer.get_file_name());
+            if let Some(code) = status.before_answer.0 {
+                // Save the code to the file system
+                BufferedFile::create_or_overwrite(file_path)
+                    .context("Cannot open file")?
+                    .write_text_data(&code)
+                    .context("Cannot write code to file")?;
+            } else {
+                // Remove the file from the file system
+                match std::fs::remove_file(&file_path) {
+                    Ok(_) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(HookReaderError::Io(e)),
+                }
+            }
+        }
+
+        if status.before_search.1 {
+            let file_path = self.data_dir.join(HookType::BeforeSearch.get_file_name());
+            if let Some(code) = status.before_search.0 {
+                // Save the code to the file system
+                BufferedFile::create_or_overwrite(file_path)
+                    .context("Cannot open file")?
+                    .write_text_data(&code)
+                    .context("Cannot write code to file")?;
+            } else {
+                // Remove the file from the file system
+                match std::fs::remove_file(&file_path) {
+                    Ok(_) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(HookReaderError::Io(e)),
+                }
+            }
+        }
+
         Ok(())
     }
 
