@@ -202,9 +202,10 @@ mod tests {
         );
 
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 2);
+        assert_eq!(list.len(), 3);
         assert_eq!(list[0].1, None);
         assert_eq!(list[1].1, None);
+        assert_eq!(list[2].1, None);
 
         // Insert (pending)
         reader
@@ -219,9 +220,10 @@ mod tests {
             Some(code1.clone())
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 2);
+        assert_eq!(list.len(), 3);
         assert_eq!(list[0], (HookType::BeforeRetrieval, Some(code1.clone())));
         assert_eq!(list[1], (HookType::BeforeAnswer, None));
+        assert_eq!(list[2], (HookType::BeforeSearch, None));
 
         // Commit
         reader.commit().unwrap();
@@ -231,9 +233,10 @@ mod tests {
             Some(code1.clone())
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 2);
+        assert_eq!(list.len(), 3);
         assert_eq!(list[0], (HookType::BeforeRetrieval, Some(code1.clone())));
         assert_eq!(list[1], (HookType::BeforeAnswer, None));
+        assert_eq!(list[2], (HookType::BeforeSearch, None));
 
         // Update with new code (pending)
         reader
@@ -248,9 +251,10 @@ mod tests {
             Some(code2.clone())
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 2);
+        assert_eq!(list.len(), 3);
         assert_eq!(list[0], (HookType::BeforeRetrieval, Some(code2.clone())));
         assert_eq!(list[1], (HookType::BeforeAnswer, None));
+        assert_eq!(list[2], (HookType::BeforeSearch, None));
 
         // Commit
         reader.commit().unwrap();
@@ -264,9 +268,10 @@ mod tests {
             None
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 2);
+        assert_eq!(list.len(), 3);
         assert_eq!(list[0].1, None);
         assert_eq!(list[1].1, None);
+        assert_eq!(list[2].1, None);
 
         // Commit
         reader.commit().unwrap();
@@ -276,9 +281,10 @@ mod tests {
             None
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 2);
+        assert_eq!(list.len(), 3);
         assert_eq!(list[0].1, None);
         assert_eq!(list[1].1, None);
+        assert_eq!(list[2].1, None);
 
         // Re-insert after delete
         reader
@@ -292,9 +298,10 @@ mod tests {
             Some(code1.clone())
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 2);
+        assert_eq!(list.len(), 3);
         assert_eq!(list[0], (HookType::BeforeRetrieval, Some(code1.clone())));
         assert_eq!(list[1], (HookType::BeforeAnswer, None));
+        assert_eq!(list[2], (HookType::BeforeSearch, None));
 
         reader.commit().unwrap();
 
@@ -303,8 +310,9 @@ mod tests {
             Some(code1.clone())
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 2);
+        assert_eq!(list.len(), 3);
         assert_eq!(list[0], (HookType::BeforeRetrieval, Some(code1.clone())));
         assert_eq!(list[1], (HookType::BeforeAnswer, None));
+        assert_eq!(list[2], (HookType::BeforeSearch, None));
     }
 }
