@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub enum HookType {
     BeforeRetrieval,
     BeforeAnswer,
+    BeforeSearch,
 }
 
 impl HookType {
@@ -11,6 +12,7 @@ impl HookType {
         match self {
             Self::BeforeRetrieval => "before_retrieval",
             Self::BeforeAnswer => "before_answer",
+            Self::BeforeSearch => "before_search",
         }
     }
 
@@ -18,6 +20,7 @@ impl HookType {
         match self {
             Self::BeforeRetrieval => "beforeRetrieval",
             Self::BeforeAnswer => "beforeAnswer",
+            Self::BeforeSearch => "beforeSearch",
         }
     }
 }

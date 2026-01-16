@@ -25,6 +25,7 @@ pub struct HookReader {
 struct Status {
     before_retrieval: (Option<String>, bool),
     before_answer: (Option<String>, bool),
+    before_search: (Option<String>, bool),
 }
 
 impl Status {
@@ -37,11 +38,17 @@ impl Status {
                 HookOperation::Insert(HookType::BeforeAnswer, code) => {
                     self.before_answer = (Some(code.clone()), true);
                 }
+                HookOperation::Insert(HookType::BeforeSearch, code) => {
+                    self.before_search = (Some(code.clone()), true);
+                }
                 HookOperation::Delete(HookType::BeforeRetrieval) => {
                     self.before_retrieval = (None, true);
                 }
                 HookOperation::Delete(HookType::BeforeAnswer) => {
                     self.before_answer = (None, true);
+                }
+                HookOperation::Delete(HookType::BeforeSearch) => {
+                    self.before_search = (None, true);
                 }
             }
         }
@@ -67,6 +74,7 @@ impl HookReader {
         let mut status = Status {
             before_retrieval: (None, false),
             before_answer: (None, false),
+            before_search: (None, false),
         };
 
         status.apply_operations(&self.pending_operations);
@@ -110,6 +118,7 @@ impl HookReader {
         let mut status = Status {
             before_retrieval: (None, false),
             before_answer: (None, false),
+            before_search: (None, false),
         };
         status.apply_operations(&self.pending_operations);
 
@@ -151,6 +160,24 @@ impl HookReader {
             result.push((HookType::BeforeAnswer, content));
         } else {
             result.push((HookType::BeforeAnswer, status.before_answer.0));
+        }
+
+        if !status.before_search.1 {
+            // if not touched
+            let file_path = self.data_dir.join(HookType::BeforeSearch.get_file_name());
+            let content = if BufferedFile::exists_as_file(&file_path) {
+                let content = BufferedFile::open(file_path)
+                    .context("Cannot open file")?
+                    .read_text_data()
+                    .context("Cannot write code to file")?;
+                Some(content)
+            } else {
+                None
+            };
+
+            result.push((HookType::BeforeSearch, content));
+        } else {
+            result.push((HookType::BeforeSearch, status.before_search.0));
         }
 
         Ok(result)
