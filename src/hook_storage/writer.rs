@@ -31,6 +31,7 @@ pub struct HookWriter {
     base_dir: PathBuf,
     before_retrieval_presence: AtomicBool,
     before_answer_presence: AtomicBool,
+    before_search_presence: AtomicBool,
     f: HookOperationCallback,
 }
 
@@ -44,10 +45,14 @@ impl HookWriter {
         let before_answer_file = base_dir.join(HookType::BeforeAnswer.get_file_name());
         let before_answer_presence = BufferedFile::exists_as_file(&before_answer_file);
 
+        let before_search_file = base_dir.join(HookType::BeforeSearch.get_file_name());
+        let before_search_presence = BufferedFile::exists_as_file(&before_search_file);
+
         Ok(Self {
             base_dir,
             before_retrieval_presence: AtomicBool::new(before_retrieval_presence),
             before_answer_presence: AtomicBool::new(before_answer_presence),
+            before_search_presence: AtomicBool::new(before_search_presence),
             f,
         })
     }
@@ -102,6 +107,9 @@ impl HookWriter {
             HookType::BeforeAnswer => {
                 self.before_answer_presence.store(true, Ordering::Relaxed);
             }
+            HookType::BeforeSearch => {
+                self.before_search_presence.store(true, Ordering::Relaxed);
+            }
         };
         let path = self.base_dir.join(hook_type.get_file_name());
         BufferedFile::create_or_overwrite(path)?.write_text_data(&code)?;
@@ -121,6 +129,9 @@ impl HookWriter {
                 }
                 HookType::BeforeAnswer => {
                     self.before_answer_presence.store(false, Ordering::Relaxed);
+                }
+                HookType::BeforeSearch => {
+                    self.before_search_presence.store(false, Ordering::Relaxed);
                 }
             },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
