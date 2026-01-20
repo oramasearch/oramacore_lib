@@ -94,6 +94,16 @@ impl<
         self.dim
     }
 
+    /// Returns the number of items inserted since the last rebuild
+    pub fn insertions_since_rebuild(&self) -> usize {
+        self.inner.insertions_since_rebuild()
+    }
+
+    /// Returns the number of items deleted since the last rebuild
+    pub fn deletions_since_rebuild(&self) -> usize {
+        self.inner.deletions_since_rebuild()
+    }
+
     pub fn get_data(&self) -> impl Iterator<Item = (DocumentId, &[f32])> + '_ {
         self.inner.data().map(|(v, DocumentIdWrapper(id))| (id, v))
     }
@@ -205,6 +215,13 @@ impl<
         self.inner
             .force_full_rebuild()
             .map_err(|e| anyhow::anyhow!(e))
+    }
+
+    pub fn deserialize_bincode_compat(data: &[u8]) -> Result<Self> {
+        let inner: HNSWIndex<f32, DocumentIdWrapper<DocumentId>> =
+            HNSWIndex::deserialize_bincode_compat(data)?;
+        let dim = inner.dimension();
+        Ok(Self { inner, dim })
     }
 }
 
@@ -786,5 +803,147 @@ mod tests {
         let results_deserialized = deserialized.search(&target, 10);
 
         assert_eq!(results_original, results_deserialized);
+    }
+
+    // ==================== Change Tracking Tests ====================
+
+    #[test]
+    fn test_change_tracking_counters_increment() {
+        let dim = 8;
+        let mut index = HNSW2Index::<usize>::new_with_deletion(dim);
+
+        // Initially both counters should be 0
+        assert_eq!(index.insertions_since_rebuild(), 0);
+        assert_eq!(index.deletions_since_rebuild(), 0);
+
+        // Add items
+        let normal = Uniform::new(0.0, 10.0).unwrap();
+        for i in 0..10 {
+            let point: Vec<f32> = (0..dim).map(|_| normal.sample(&mut rand::rng())).collect();
+            index.add(&point, i).unwrap();
+        }
+        index.build().unwrap();
+
+        // After build, insertions counter should reflect added items
+        assert_eq!(index.insertions_since_rebuild(), 10);
+        assert_eq!(index.deletions_since_rebuild(), 0);
+
+        // Delete some items
+        for i in 0..3 {
+            index.delete(i).unwrap();
+        }
+
+        // Deletions counter should increment
+        assert_eq!(index.insertions_since_rebuild(), 10);
+        assert_eq!(index.deletions_since_rebuild(), 3);
+    }
+
+    #[test]
+    fn test_change_tracking_persists_after_serialization() {
+        let dim = 8;
+        let mut index = HNSW2Index::<usize>::new_with_deletion(dim);
+
+        // Add and delete items
+        let normal = Uniform::new(0.0, 10.0).unwrap();
+        for i in 0..10 {
+            let point: Vec<f32> = (0..dim).map(|_| normal.sample(&mut rand::rng())).collect();
+            index.add(&point, i).unwrap();
+        }
+        index.build().unwrap();
+
+        for i in 0..3 {
+            index.delete(i).unwrap();
+        }
+
+        // Verify counters before serialization
+        assert_eq!(index.insertions_since_rebuild(), 10);
+        assert_eq!(index.deletions_since_rebuild(), 3);
+
+        // Serialize and deserialize
+        let serialized = bincode::serialize(&index).unwrap();
+        let deserialized: HNSW2Index<usize> = bincode::deserialize(&serialized).unwrap();
+
+        // Verify counters persist after deserialization
+        assert_eq!(deserialized.insertions_since_rebuild(), 10);
+        assert_eq!(deserialized.deletions_since_rebuild(), 3);
+    }
+
+    #[test]
+    fn test_change_tracking_reset_after_full_rebuild() {
+        let dim = 8;
+        let mut index = HNSW2Index::<usize>::new_with_deletion(dim);
+
+        // Add items
+        let normal = Uniform::new(0.0, 10.0).unwrap();
+        for i in 0..20 {
+            let point: Vec<f32> = (0..dim).map(|_| normal.sample(&mut rand::rng())).collect();
+            index.add(&point, i).unwrap();
+        }
+        index.build().unwrap();
+
+        // Delete enough to trigger full rebuild (50%)
+        for i in 0..10 {
+            index.delete(i).unwrap();
+        }
+
+        // Verify counters before rebuild
+        assert_eq!(index.insertions_since_rebuild(), 20);
+        assert_eq!(index.deletions_since_rebuild(), 10);
+
+        // Force full rebuild
+        index.force_full_rebuild().unwrap();
+
+        // After full rebuild, both counters should reset to 0
+        assert_eq!(index.insertions_since_rebuild(), 0);
+        assert_eq!(index.deletions_since_rebuild(), 0);
+    }
+
+    #[test]
+    fn test_change_tracking_in_health_metrics() {
+        let dim = 8;
+        let mut index = HNSW2Index::<usize>::new_with_deletion(dim);
+
+        // Add items
+        let normal = Uniform::new(0.0, 10.0).unwrap();
+        for i in 0..10 {
+            let point: Vec<f32> = (0..dim).map(|_| normal.sample(&mut rand::rng())).collect();
+            index.add(&point, i).unwrap();
+        }
+        index.build().unwrap();
+
+        // Delete some items
+        for i in 0..3 {
+            index.delete(i).unwrap();
+        }
+
+        // Verify health metrics include the change tracking counters
+        let health = index.analyze_health();
+        assert_eq!(health.insertions_since_rebuild, 10);
+        assert_eq!(health.deletions_since_rebuild, 3);
+    }
+
+    #[test]
+    fn test_change_tracking_incremental_additions() {
+        let dim = 8;
+        let mut index = HNSW2Index::<usize>::new_with_deletion(dim);
+        let normal = Uniform::new(0.0, 10.0).unwrap();
+
+        // First batch
+        for i in 0..5 {
+            let point: Vec<f32> = (0..dim).map(|_| normal.sample(&mut rand::rng())).collect();
+            index.add(&point, i).unwrap();
+        }
+        index.build().unwrap();
+        assert_eq!(index.insertions_since_rebuild(), 5);
+
+        // Second batch (incremental)
+        for i in 5..10 {
+            let point: Vec<f32> = (0..dim).map(|_| normal.sample(&mut rand::rng())).collect();
+            index.add(&point, i).unwrap();
+        }
+        index.build().unwrap();
+
+        // Counter should reflect all insertions
+        assert_eq!(index.insertions_since_rebuild(), 10);
     }
 }

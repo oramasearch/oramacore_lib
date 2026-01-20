@@ -161,6 +161,10 @@ pub struct HNSWIndex<E: node::FloatElement, T: node::IdxType> {
     _delete_ids: HashSet<usize>, //save deleted ids
     mt: metrics::Metric,         //compute metrics
 
+    // Change tracking since last rebuild
+    _insertions_since_rebuild: usize, // Count of items added since last rebuild
+    _deletions_since_rebuild: usize,  // Count of items deleted since last rebuild
+
                                  // // use for serde
                                  // _id2neighbor_tmp: Vec<Vec<Vec<usize>>>,
                                  // _id2neighbor0_tmp: Vec<Vec<usize>>,
@@ -185,6 +189,8 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
             _ef_build: params.ef_build,
             _ef_search: params.ef_search,
             mt: metrics::Metric::Unknown,
+            _insertions_since_rebuild: 0,
+            _deletions_since_rebuild: 0,
             ..Default::default()
         }
     }
@@ -197,6 +203,18 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Returns the number of items inserted since the last rebuild
+    #[inline]
+    pub fn insertions_since_rebuild(&self) -> usize {
+        self._insertions_since_rebuild
+    }
+
+    /// Returns the number of items deleted since the last rebuild
+    #[inline]
+    pub fn deletions_since_rebuild(&self) -> usize {
+        self._deletions_since_rebuild
     }
 
     pub fn data(&self) -> impl Iterator<Item = (&[E], T)> {
@@ -361,6 +379,7 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
             return Err("id has deleted");
         }
         self._delete_ids.insert(id);
+        self._deletions_since_rebuild += 1;
         Ok(())
     }
 
@@ -630,12 +649,15 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
             return Err("contruct error");
         }
 
+        let added = self._n_items - self._n_constructed_items;
+
         into_iter!((self._n_constructed_items..self._n_items), ctr);
         ctr.for_each(|insert_id: usize| {
             self.construct_single_item(insert_id).unwrap();
         });
 
         self._n_constructed_items = self._n_items;
+        self._insertions_since_rebuild += added;
         Ok(())
     }
 
@@ -824,6 +846,7 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
             return Err("construct error");
         }
 
+        let added = self._n_items - self._n_constructed_items;
         let pool = BufferPool::new(self._nodes.len(), self._ef_build);
 
         into_iter!((self._n_constructed_items..self._n_items), ctr);
@@ -835,6 +858,7 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
         });
 
         self._n_constructed_items = self._n_items;
+        self._insertions_since_rebuild += added;
         Ok(())
     }
 
@@ -940,6 +964,7 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
         self.construct_single_item(insert_id).unwrap();
 
         self._n_constructed_items += 1;
+        self._insertions_since_rebuild += 1;
 
         Ok(())
     }
@@ -1059,6 +1084,8 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
             severely_affected_nodes,
             unreachable_nodes,
             recommended_strategy,
+            insertions_since_rebuild: self._insertions_since_rebuild,
+            deletions_since_rebuild: self._deletions_since_rebuild,
         }
     }
 
@@ -1228,6 +1255,8 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
             self._id2level.clear();
             self._item2id.clear();
             self._delete_ids.clear();
+            self._insertions_since_rebuild = 0;
+            self._deletions_since_rebuild = 0;
             return Ok(compacted_count);
         }
 
@@ -1253,6 +1282,10 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
 
         // Ensure all nodes are reachable after rebuild
         self.ensure_full_connectivity()?;
+
+        // Reset change tracking counters after full rebuild
+        self._insertions_since_rebuild = 0;
+        self._deletions_since_rebuild = 0;
 
         Ok(compacted_count)
     }
@@ -1303,6 +1336,10 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
                 repaired_count += 1;
             }
         }
+
+        // Reset deletions counter only - partial repair doesn't reset index structure
+        // Keep insertions counter as the inserted nodes are still part of the index
+        self._deletions_since_rebuild = 0;
 
         Ok(repaired_count)
     }
@@ -1476,6 +1513,30 @@ impl<E: node::FloatElement, T: node::IdxType> ann_index::ANNIndex<E, T> for HNSW
     }
 }
 
+/// Legacy dump format without change tracking fields (for backward compatibility)
+#[derive(Default, Debug, Deserialize)]
+struct HNSWIndexDumpLegacy<'hsnw, E: node::FloatElement, T: node::IdxType> {
+    _dimension: usize,
+    _n_items: usize,
+    _n_constructed_items: usize,
+    _max_item: usize,
+    _n_neighbor: usize,
+    _n_neighbor0: usize,
+    _max_level: usize,
+    _cur_level: usize,
+    _root_id: usize,
+    _id2level: Vec<usize>,
+    _has_removed: bool,
+    _ef_build: usize,
+    _ef_search: usize,
+    mt: metrics::Metric,
+    _id2neighbor_tmp: Vec<Vec<Vec<usize>>>,
+    _id2neighbor0_tmp: Vec<Vec<usize>>,
+    _nodes_tmp: Vec<Cow<'hsnw, Box<node::Node<E, T>>>>,
+    _item2id_tmp: Vec<(Cow<'hsnw, T>, usize)>,
+    _delete_ids_tmp: Vec<usize>,
+}
+
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct HNSWIndexDump<'hsnw, E: node::FloatElement, T: node::IdxType> {
     _dimension: usize, // dimension
@@ -1492,6 +1553,10 @@ pub struct HNSWIndexDump<'hsnw, E: node::FloatElement, T: node::IdxType> {
     _ef_build: usize,    // num of max candidates when building
     _ef_search: usize,   // num of max candidates when searching
     mt: metrics::Metric, //compute metrics
+
+    // Change tracking since last rebuild
+    _insertions_since_rebuild: usize,
+    _deletions_since_rebuild: usize,
 
     // use for serde
     _id2neighbor_tmp: Vec<Vec<Vec<usize>>>,
@@ -1542,6 +1607,8 @@ impl<E: node::FloatElement, T: node::IdxType> Serialize for HNSWIndex<E, T> {
             _ef_build: self._ef_build,
             _ef_search: self._ef_search,
             mt: self.mt,
+            _insertions_since_rebuild: self._insertions_since_rebuild,
+            _deletions_since_rebuild: self._deletions_since_rebuild,
             _id2neighbor_tmp,
             _id2neighbor0_tmp,
             _nodes_tmp,
@@ -1553,6 +1620,89 @@ impl<E: node::FloatElement, T: node::IdxType> Serialize for HNSWIndex<E, T> {
     }
 }
 
+impl<E: node::FloatElement + DeserializeOwned, T: node::IdxType + DeserializeOwned> HNSWIndex<E, T> {
+    /// Deserialize from bincode bytes with backward compatibility for legacy format.
+    /// Use this method when loading data that may have been serialized with an older version.
+    pub fn deserialize_bincode_compat(bytes: &[u8]) -> Result<Self, Box<bincode::ErrorKind>> {
+        // Try new format first
+        if let Ok(dump) = bincode::deserialize::<HNSWIndexDump<E, T>>(bytes) {
+            return Self::from_dump(dump);
+        }
+
+        // Fall back to legacy format (without change tracking fields)
+        let legacy: HNSWIndexDumpLegacy<E, T> = bincode::deserialize(bytes)?;
+        Self::from_legacy_dump(legacy)
+    }
+
+    fn from_dump(dump: HNSWIndexDump<E, T>) -> Result<Self, Box<bincode::ErrorKind>> {
+        let _nodes: Vec<_> = dump._nodes_tmp.into_iter().map(|x| x.into_owned()).collect();
+        let _id2neighbor = dump._id2neighbor_tmp.into_iter()
+            .map(|x| x.into_iter().map(RwLock::new).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let _id2neighbor0 = dump._id2neighbor0_tmp.into_iter().map(RwLock::new).collect::<Vec<_>>();
+        let _item2id = dump._item2id_tmp.into_iter().map(|(k, v)| (k.into_owned(), v)).collect::<HashMap<_, _>>();
+        let _delete_ids = dump._delete_ids_tmp.into_iter().collect::<HashSet<_>>();
+
+        Ok(Self {
+            _dimension: dump._dimension,
+            _n_items: dump._n_items,
+            _n_constructed_items: dump._n_constructed_items,
+            _max_item: dump._max_item,
+            _n_neighbor: dump._n_neighbor,
+            _n_neighbor0: dump._n_neighbor0,
+            _max_level: dump._max_level,
+            _cur_level: dump._cur_level,
+            _root_id: dump._root_id,
+            _id2level: dump._id2level,
+            _has_removed: dump._has_removed,
+            _ef_build: dump._ef_build,
+            _ef_search: dump._ef_search,
+            mt: dump.mt,
+            _insertions_since_rebuild: dump._insertions_since_rebuild,
+            _deletions_since_rebuild: dump._deletions_since_rebuild,
+            _id2neighbor,
+            _id2neighbor0,
+            _nodes,
+            _item2id,
+            _delete_ids,
+        })
+    }
+
+    fn from_legacy_dump(dump: HNSWIndexDumpLegacy<E, T>) -> Result<Self, Box<bincode::ErrorKind>> {
+        let _nodes: Vec<_> = dump._nodes_tmp.into_iter().map(|x| x.into_owned()).collect();
+        let _id2neighbor = dump._id2neighbor_tmp.into_iter()
+            .map(|x| x.into_iter().map(RwLock::new).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let _id2neighbor0 = dump._id2neighbor0_tmp.into_iter().map(RwLock::new).collect::<Vec<_>>();
+        let _item2id = dump._item2id_tmp.into_iter().map(|(k, v)| (k.into_owned(), v)).collect::<HashMap<_, _>>();
+        let _delete_ids = dump._delete_ids_tmp.into_iter().collect::<HashSet<_>>();
+
+        Ok(Self {
+            _dimension: dump._dimension,
+            _n_items: dump._n_items,
+            _n_constructed_items: dump._n_constructed_items,
+            _max_item: dump._max_item,
+            _n_neighbor: dump._n_neighbor,
+            _n_neighbor0: dump._n_neighbor0,
+            _max_level: dump._max_level,
+            _cur_level: dump._cur_level,
+            _root_id: dump._root_id,
+            _id2level: dump._id2level,
+            _has_removed: dump._has_removed,
+            _ef_build: dump._ef_build,
+            _ef_search: dump._ef_search,
+            mt: dump.mt,
+            _insertions_since_rebuild: 0,
+            _deletions_since_rebuild: 0,
+            _id2neighbor,
+            _id2neighbor0,
+            _nodes,
+            _item2id,
+            _delete_ids,
+        })
+    }
+}
+
 impl<'de, E: node::FloatElement + DeserializeOwned, T: node::IdxType + Deserialize<'de>>
     Deserialize<'de> for HNSWIndex<E, T>
 {
@@ -1560,6 +1710,7 @@ impl<'de, E: node::FloatElement + DeserializeOwned, T: node::IdxType + Deseriali
     where
         D: serde::Deserializer<'de>,
     {
+        // Deserialize the new format (with change tracking fields)
         let dump: HNSWIndexDump<E, T> = HNSWIndexDump::deserialize(deserializer)?;
 
         let _nodes: Vec<_> = dump
@@ -1606,6 +1757,8 @@ impl<'de, E: node::FloatElement + DeserializeOwned, T: node::IdxType + Deseriali
             _ef_build: dump._ef_build,
             _ef_search: dump._ef_search,
             mt: dump.mt,
+            _insertions_since_rebuild: dump._insertions_since_rebuild,
+            _deletions_since_rebuild: dump._deletions_since_rebuild,
             _id2neighbor,
             _id2neighbor0,
             _nodes,
@@ -1658,8 +1811,12 @@ mod hsnw_tests {
     #[test]
     fn test_serde_backcompatibility() {
         let b = include_bytes!("./dump.hsnw");
-        let new_index: HNSWIndex<f32, usize> = bincode::deserialize(b).unwrap();
+        // Use backward-compatible deserialization for legacy format
+        let new_index: HNSWIndex<f32, usize> = HNSWIndex::deserialize_bincode_compat(b).unwrap();
         assert_eq!(new_index.len(), 100);
+        // Legacy format should have default values for new fields
+        assert_eq!(new_index.insertions_since_rebuild(), 0);
+        assert_eq!(new_index.deletions_since_rebuild(), 0);
     }
 
     // ==================== Rebuild Tests ====================
@@ -2352,7 +2509,7 @@ mod hsnw_tests {
         let mut index = HNSWIndex::<f32, usize>::new(dimension, &HNSWParams::<f32>::default());
 
         // Use batch_add
-        index.batch_add(&items).unwrap();
+        index.batch_add(items.into_iter()).unwrap();
         index.build(Metric::Euclidean).unwrap();
 
         // Verify index has correct count
@@ -2392,7 +2549,7 @@ mod hsnw_tests {
             .map(|(i, s)| (s.as_slice(), i))
             .collect();
         let mut batch_index = HNSWIndex::<f32, usize>::new(dimension, &HNSWParams::<f32>::default());
-        batch_index.batch_add(&items).unwrap();
+        batch_index.batch_add(items.into_iter()).unwrap();
         batch_index.build(Metric::Euclidean).unwrap();
 
         // Compare search results - both should be functional

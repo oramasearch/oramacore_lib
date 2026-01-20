@@ -58,6 +58,10 @@ pub struct GraphHealthMetrics {
     pub unreachable_nodes: usize,
     /// The recommended rebuild strategy based on these metrics
     pub recommended_strategy: RebuildStrategy,
+    /// Number of items inserted since the last rebuild
+    pub insertions_since_rebuild: usize,
+    /// Number of items deleted since the last rebuild
+    pub deletions_since_rebuild: usize,
 }
 
 impl GraphHealthMetrics {

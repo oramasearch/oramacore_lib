@@ -121,6 +121,17 @@ impl ReadBufferedFile {
             .with_context(|| format!("Cannot read bincode data from {:?}", self.path))?;
         Ok(data)
     }
+
+    pub fn read_as_vec(self) -> Result<Vec<u8>> {
+        let file = std::fs::File::open(&self.path)
+            .with_context(|| format!("Cannot open file at {:?}", self.path))?;
+        let mut reader = std::io::BufReader::new(file);
+        let mut data = Vec::new();
+        reader
+            .read_to_end(&mut data)
+            .with_context(|| format!("Cannot read data from {:?}", self.path))?;
+        Ok(data)
+    }
 }
 
 pub struct WriteBufferedFile {
