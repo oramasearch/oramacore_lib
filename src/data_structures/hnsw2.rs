@@ -110,6 +110,12 @@ impl<
             .map_err(|e| anyhow::anyhow!(e))
     }
 
+    pub fn batch_add<'a, I: Iterator<Item = (impl AsRef<[f32]> + 'a, DocumentId)>>(&mut self, items: I) -> Result<()> {
+        self.inner
+            .batch_add(items.map(|(v, i)| (v, DocumentIdWrapper(i))))
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+
     pub fn add_owned(&mut self, point: Vec<f32>, id: DocumentId) -> Result<()> {
         self.inner
             .add_owned(point, DocumentIdWrapper(id))

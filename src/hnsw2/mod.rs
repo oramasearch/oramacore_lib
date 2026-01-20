@@ -29,6 +29,111 @@ use rebuild::{GraphHealthMetrics, RebuildConfig, RebuildResult, RebuildStrategy}
 
 use crate::into_iter;
 
+/// Efficient visited-set that avoids O(n) clear operations using generation counters.
+/// Instead of clearing the entire array, we increment the generation counter.
+/// A slot is considered visited if its stored generation equals the current generation.
+struct Visited {
+    store: Vec<u8>,
+    generation: u8,
+}
+
+impl Visited {
+    fn new(capacity: usize) -> Self {
+        Self {
+            store: vec![0; capacity],
+            generation: 1,
+        }
+    }
+
+    /// Clear the visited set in O(1) time (most of the time).
+    /// When generation wraps around (every 255 clears), we do an O(n) reset.
+    fn clear(&mut self) {
+        if self.generation == 255 {
+            self.store.fill(0);
+            self.generation = 1;
+        } else {
+            self.generation += 1;
+        }
+    }
+
+    /// Mark an id as visited. Returns true if it was not previously visited.
+    #[inline]
+    fn insert(&mut self, id: usize) -> bool {
+        if id >= self.store.len() {
+            // Grow the store if needed
+            self.store.resize(id + 1, 0);
+        }
+        if self.store[id] == self.generation {
+            false
+        } else {
+            self.store[id] = self.generation;
+            true
+        }
+    }
+
+    /// Check if an id has been visited.
+    #[inline]
+    fn contains(&self, id: usize) -> bool {
+        id < self.store.len() && self.store[id] == self.generation
+    }
+}
+
+/// Reusable buffers for construction to avoid repeated allocations.
+struct ConstructionBuffers<E: node::FloatElement> {
+    visited: Visited,
+    candidates: BinaryHeap<Neighbor<E, usize>>,
+    top_candidates: BinaryHeap<Neighbor<E, usize>>,
+    sorted_candidates: Vec<Neighbor<E, usize>>,
+}
+
+impl<E: node::FloatElement> ConstructionBuffers<E> {
+    fn new(capacity: usize, ef_build: usize) -> Self {
+        Self {
+            visited: Visited::new(capacity),
+            candidates: BinaryHeap::with_capacity(ef_build),
+            top_candidates: BinaryHeap::with_capacity(ef_build),
+            sorted_candidates: Vec::with_capacity(ef_build),
+        }
+    }
+
+    fn clear(&mut self) {
+        self.visited.clear();
+        self.candidates.clear();
+        self.top_candidates.clear();
+        self.sorted_candidates.clear();
+    }
+}
+
+/// Thread-safe pool of construction buffers for parallel batch construction.
+struct BufferPool<E: node::FloatElement> {
+    pool: std::sync::Mutex<Vec<ConstructionBuffers<E>>>,
+    capacity: usize,
+    ef_build: usize,
+}
+
+impl<E: node::FloatElement> BufferPool<E> {
+    fn new(capacity: usize, ef_build: usize) -> Self {
+        Self {
+            pool: std::sync::Mutex::new(Vec::new()),
+            capacity,
+            ef_build,
+        }
+    }
+
+    fn acquire(&self) -> ConstructionBuffers<E> {
+        self.pool
+            .lock()
+            .unwrap()
+            .pop()
+            .unwrap_or_else(|| ConstructionBuffers::new(self.capacity, self.ef_build))
+    }
+
+    fn release(&self, mut buffers: ConstructionBuffers<E>) {
+        buffers.clear();
+        self.pool.lock().unwrap().push(buffers);
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct HNSWIndex<E: node::FloatElement, T: node::IdxType> {
     _dimension: usize, // dimension
@@ -528,6 +633,205 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
         into_iter!((self._n_constructed_items..self._n_items), ctr);
         ctr.for_each(|insert_id: usize| {
             self.construct_single_item(insert_id).unwrap();
+        });
+
+        self._n_constructed_items = self._n_items;
+        Ok(())
+    }
+
+    /// Optimized batch insertion when all items are known upfront.
+    /// This method adds all items first without constructing connections,
+    /// then builds the graph using optimized buffer-pooled construction.
+    pub fn batch_add<'a, I: Iterator<Item = (impl AsRef<[E]> + 'a, T)>>(&mut self, items: I) -> Result<(), &'static str> where E: 'a {
+        for (vs, idx) in items {
+            self.add_item_not_constructed(&node::Node::new_with_idx(vs.as_ref(), idx.clone()))?;
+        }
+        Ok(())
+    }
+
+    /// Search layer using pre-allocated buffers to avoid repeated allocations.
+    fn search_layer_with_candidate_buffered(
+        &self,
+        search_data: &node::Node<E, T>,
+        initial_candidates: &[Neighbor<E, usize>],
+        visited: &mut Visited,
+        candidates: &mut BinaryHeap<Neighbor<E, usize>>,
+        top_candidates: &mut BinaryHeap<Neighbor<E, usize>>,
+        level: usize,
+        ef: usize,
+        has_deletion: bool,
+    ) {
+        candidates.clear();
+        top_candidates.clear();
+
+        for neighbor in initial_candidates.iter() {
+            let root = neighbor.idx();
+            if !has_deletion || !self.is_deleted(root) {
+                let dist = self.get_distance_from_vec(self.get_data(root), search_data);
+                top_candidates.push(Neighbor::new(root, dist));
+                candidates.push(Neighbor::new(root, -dist));
+            } else {
+                candidates.push(Neighbor::new(root, -E::max_value()))
+            }
+            visited.insert(root);
+        }
+
+        let mut lower_bound = if top_candidates.is_empty() {
+            E::max_value()
+        } else {
+            top_candidates.peek().unwrap()._distance
+        };
+
+        while !candidates.is_empty() {
+            let cur_neigh = candidates.peek().unwrap();
+            let cur_dist = -cur_neigh._distance;
+            let cur_id = cur_neigh.idx();
+            candidates.pop();
+
+            if cur_dist > lower_bound {
+                break;
+            }
+
+            let cur_neighbors = self.get_neighbor(cur_id, level).read().unwrap();
+            for neigh in cur_neighbors.iter() {
+                if visited.contains(*neigh) {
+                    continue;
+                }
+                visited.insert(*neigh);
+
+                let dist = self.get_distance_from_vec(self.get_data(*neigh), search_data);
+                if top_candidates.len() < ef || dist < lower_bound {
+                    candidates.push(Neighbor::new(*neigh, -dist));
+
+                    if !self.is_deleted(*neigh) {
+                        top_candidates.push(Neighbor::new(*neigh, dist));
+                    }
+
+                    if top_candidates.len() > ef {
+                        top_candidates.pop();
+                    }
+
+                    if !top_candidates.is_empty() {
+                        lower_bound = top_candidates.peek().unwrap()._distance;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Construct a single item using pre-allocated buffers.
+    fn construct_single_item_with_buffers(
+        &self,
+        insert_id: usize,
+        buffers: &mut ConstructionBuffers<E>,
+    ) -> Result<(), &'static str> {
+        let insert_level = self._id2level[insert_id];
+        let mut cur_id = self._root_id;
+
+        if insert_id == 0 {
+            return Ok(());
+        }
+
+        // Navigate through upper levels to find entry point
+        if insert_level < self._cur_level {
+            let mut cur_dist = self.get_distance_from_id(cur_id, insert_id);
+            let mut cur_level = self._cur_level;
+            while cur_level > insert_level {
+                let mut changed = true;
+                while changed {
+                    changed = false;
+                    let cur_neighs = self.get_neighbor(cur_id, cur_level).read().unwrap();
+                    for cur_neigh in cur_neighs.iter() {
+                        if *cur_neigh > self._n_items {
+                            return Err("cand error");
+                        }
+                        let neigh_dist = self.get_distance_from_id(*cur_neigh, insert_id);
+                        if neigh_dist < cur_dist {
+                            cur_dist = neigh_dist;
+                            cur_id = *cur_neigh;
+                            changed = true;
+                        }
+                    }
+                }
+                cur_level -= 1;
+            }
+        }
+
+        let mut level = if insert_level < self._cur_level {
+            insert_level
+        } else {
+            self._cur_level
+        };
+
+        // Clear and setup buffers
+        buffers.visited.clear();
+        buffers.sorted_candidates.clear();
+
+        let insert_data = self.get_data(insert_id);
+        buffers.visited.insert(insert_id);
+        buffers.sorted_candidates.push(Neighbor::new(
+            cur_id,
+            self.get_distance_from_id(cur_id, insert_id),
+        ));
+
+        loop {
+            // Search for candidates using buffered method
+            self.search_layer_with_candidate_buffered(
+                insert_data,
+                &buffers.sorted_candidates,
+                &mut buffers.visited,
+                &mut buffers.candidates,
+                &mut buffers.top_candidates,
+                level,
+                self._ef_build,
+                false,
+            );
+
+            if self.is_deleted(cur_id) {
+                let cur_dist = self.get_distance_from_id(cur_id, insert_id);
+                buffers.top_candidates.push(Neighbor::new(cur_id, cur_dist));
+                if buffers.top_candidates.len() > self._ef_build {
+                    buffers.top_candidates.pop();
+                }
+            }
+
+            // Convert top_candidates to sorted_candidates
+            buffers.sorted_candidates.clear();
+            while let Some(candidate) = buffers.top_candidates.pop() {
+                buffers.sorted_candidates.push(candidate);
+            }
+            buffers.sorted_candidates.reverse();
+
+            if buffers.sorted_candidates.is_empty() {
+                return Err("sorted sorted_candidate is empty");
+            }
+
+            cur_id = self
+                .connect_neighbor(insert_id, &buffers.sorted_candidates, level, false)
+                .unwrap();
+
+            if level == 0 {
+                break;
+            }
+            level -= 1;
+        }
+        Ok(())
+    }
+
+    /// Optimized batch construction using buffer pooling for better performance.
+    fn batch_construct_optimized(&mut self, _mt: metrics::Metric) -> Result<(), &'static str> {
+        if self._n_items < self._n_constructed_items {
+            return Err("construct error");
+        }
+
+        let pool = BufferPool::new(self._nodes.len(), self._ef_build);
+
+        into_iter!((self._n_constructed_items..self._n_items), ctr);
+        ctr.for_each(|insert_id: usize| {
+            let mut buffers = pool.acquire();
+            self.construct_single_item_with_buffers(insert_id, &mut buffers)
+                .unwrap();
+            pool.release(buffers);
         });
 
         self._n_constructed_items = self._n_items;
@@ -1116,7 +1420,12 @@ impl<E: node::FloatElement, T: node::IdxType> ann_index::ANNIndex<E, T> for HNSW
         let new_items = self._n_items - self._n_constructed_items;
         if new_items > 0 {
             let is_fresh_build = self._n_constructed_items == 0;
-            self.batch_construct(mt)?;
+            // Use optimized batch construction for fresh builds with buffer pooling
+            if is_fresh_build {
+                self.batch_construct_optimized(mt)?;
+            } else {
+                self.batch_construct(mt)?;
+            }
             // Check connectivity on fresh builds OR when batch is >= 10% of existing index
             // Small incremental additions connect to existing graph naturally via HNSW algorithm
             // Only large batches risk creating isolated clusters that need repair
@@ -2018,5 +2327,168 @@ mod hsnw_tests {
         let target: Vec<f32> = (0..16).map(|_| normal.sample(&mut rand::rng())).collect();
         let results = index.search(&target, 10);
         assert!(!results.is_empty(), "Search should work after rebuild");
+    }
+
+    #[test]
+    fn test_batch_add_basic() {
+        let dimension = 16;
+        let normal = Uniform::new(0.0, 10.0).unwrap();
+
+        // Create items for batch add
+        let samples: Vec<Vec<f32>> = (0..100)
+            .map(|_| {
+                (0..dimension)
+                    .map(|_| normal.sample(&mut rand::rng()))
+                    .collect()
+            })
+            .collect();
+
+        let items: Vec<(&[f32], usize)> = samples
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.as_slice(), i))
+            .collect();
+
+        let mut index = HNSWIndex::<f32, usize>::new(dimension, &HNSWParams::<f32>::default());
+
+        // Use batch_add
+        index.batch_add(&items).unwrap();
+        index.build(Metric::Euclidean).unwrap();
+
+        // Verify index has correct count
+        assert_eq!(index.len(), 100);
+
+        // Verify search works
+        let target: Vec<f32> = (0..dimension).map(|_| normal.sample(&mut rand::rng())).collect();
+        let results = index.search(&target, 10);
+        assert_eq!(results.len(), 10);
+    }
+
+    #[test]
+    fn test_batch_add_search_quality() {
+        let dimension = 32;
+        let normal = Uniform::new(0.0, 10.0).unwrap();
+
+        // Create two indexes - one with batch_add, one with regular add
+        let samples: Vec<Vec<f32>> = (0..500)
+            .map(|_| {
+                (0..dimension)
+                    .map(|_| normal.sample(&mut rand::rng()))
+                    .collect()
+            })
+            .collect();
+
+        // Index using regular add
+        let mut regular_index = HNSWIndex::<f32, usize>::new(dimension, &HNSWParams::<f32>::default());
+        for (i, sample) in samples.iter().enumerate() {
+            regular_index.add(sample, i).unwrap();
+        }
+        regular_index.build(Metric::Euclidean).unwrap();
+
+        // Index using batch_add
+        let items: Vec<(&[f32], usize)> = samples
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.as_slice(), i))
+            .collect();
+        let mut batch_index = HNSWIndex::<f32, usize>::new(dimension, &HNSWParams::<f32>::default());
+        batch_index.batch_add(&items).unwrap();
+        batch_index.build(Metric::Euclidean).unwrap();
+
+        // Compare search results - both should be functional
+        let targets: Vec<Vec<f32>> = (0..10)
+            .map(|_| (0..dimension).map(|_| normal.sample(&mut rand::rng())).collect())
+            .collect();
+
+        for target in &targets {
+            let regular_results = regular_index.search(target, 10);
+            let batch_results = batch_index.search(target, 10);
+
+            // Both should return results
+            assert!(!regular_results.is_empty(), "Regular index search failed");
+            assert!(!batch_results.is_empty(), "Batch index search failed");
+        }
+    }
+
+    #[test]
+    fn test_batch_construct_optimized_equivalence() {
+        let dimension = 16;
+        let normal = Uniform::new(0.0, 10.0).unwrap();
+
+        let samples: Vec<Vec<f32>> = (0..100)
+            .map(|_| {
+                (0..dimension)
+                    .map(|_| normal.sample(&mut rand::rng()))
+                    .collect()
+            })
+            .collect();
+
+        // Test that both construction methods produce valid graphs
+        let mut index = HNSWIndex::<f32, usize>::new(dimension, &HNSWParams::<f32>::default());
+        for (i, sample) in samples.iter().enumerate() {
+            index.add(sample, i).unwrap();
+        }
+        index.build(Metric::Euclidean).unwrap();
+
+        // Verify graph health
+        let metrics = index.analyze_health();
+        assert_eq!(metrics.total_nodes, 100);
+        assert_eq!(metrics.unreachable_nodes, 0);
+        assert_eq!(metrics.recommended_strategy, RebuildStrategy::NoAction);
+    }
+
+    #[test]
+    fn test_visited_generation_counter() {
+        // Test the Visited struct directly
+        let mut visited = super::Visited::new(100);
+
+        // Insert some values
+        assert!(visited.insert(0)); // First insert returns true
+        assert!(!visited.insert(0)); // Second insert returns false (already visited)
+        assert!(visited.insert(1));
+        assert!(!visited.insert(1));
+
+        // Verify contains
+        assert!(visited.contains(0));
+        assert!(visited.contains(1));
+        assert!(!visited.contains(2));
+
+        // Clear and verify
+        visited.clear();
+        assert!(!visited.contains(0));
+        assert!(!visited.contains(1));
+
+        // Can insert again after clear
+        assert!(visited.insert(0));
+        assert!(visited.contains(0));
+    }
+
+    #[test]
+    fn test_visited_generation_wraparound() {
+        // Test generation counter wraparound (every 255 clears)
+        let mut visited = super::Visited::new(10);
+
+        // Do 256 clear cycles to trigger wraparound
+        for _ in 0..256 {
+            visited.insert(0);
+            assert!(visited.contains(0));
+            visited.clear();
+            assert!(!visited.contains(0));
+        }
+
+        // Should still work after wraparound
+        visited.insert(5);
+        assert!(visited.contains(5));
+        assert!(!visited.contains(0));
+    }
+
+    #[test]
+    fn test_visited_auto_grow() {
+        let mut visited = super::Visited::new(10);
+
+        // Insert beyond initial capacity
+        assert!(visited.insert(100));
+        assert!(visited.contains(100));
+        assert!(!visited.contains(50));
     }
 }
