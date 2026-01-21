@@ -51,7 +51,7 @@ impl<E: node::FloatElement> HNSWParams<E> {
 impl<E: node::FloatElement> Default for HNSWParams<E> {
     fn default() -> Self {
         HNSWParams {
-            max_item: 1000000,
+            max_item: 10_000_000,
             n_neighbor: 32,
             n_neighbor0: 64,
             max_level: 20,

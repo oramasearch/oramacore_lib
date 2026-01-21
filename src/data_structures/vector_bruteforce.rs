@@ -68,6 +68,13 @@ impl<DocumentId: Debug + Clone + Copy + Serialize + Ord + Send + Sync>
         self.data.push((id, point.into_boxed_slice(), magnitude));
     }
 
+    pub fn delete(&mut self, ids: &std::collections::HashSet<DocumentId>)
+    where
+        DocumentId: std::hash::Hash,
+    {
+        self.data.retain(|(id, _, _)| !ids.contains(id));
+    }
+
     pub fn search(
         &self,
         target: &[f32],
@@ -147,7 +154,7 @@ fn search_on<DocumentId: Clone + Copy + Ord>(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     use rand::distr::{Distribution, Uniform};
 
@@ -213,5 +220,63 @@ mod tests {
         let v2 = new_index.search(&target, 10, 0.0, &());
 
         assert_eq!(v1, v2);
+    }
+
+    #[test]
+    fn test_delete() {
+        let dim = 3;
+        let mut index = VectorBruteForce::new(dim);
+
+        let points = [
+            vec![255.0, 0.0, 0.0],
+            vec![0.0, 255.0, 0.0],
+            vec![0.0, 0.0, 255.0],
+            vec![128.0, 128.0, 0.0],
+        ];
+
+        for (id, point) in points.iter().enumerate() {
+            index.add_owned(point.clone(), id);
+        }
+
+        assert_eq!(index.len(), 4);
+
+        // Delete documents 1 and 3
+        let ids_to_delete: HashSet<usize> = HashSet::from([1, 3]);
+        index.delete(&ids_to_delete);
+
+        assert_eq!(index.len(), 2);
+
+        // Verify only documents 0 and 2 remain
+        let remaining_ids: HashSet<usize> = index.get_data().map(|(id, _)| id).collect();
+        assert_eq!(remaining_ids, HashSet::from([0, 2]));
+    }
+
+    #[test]
+    fn test_delete_empty_set() {
+        let dim = 3;
+        let mut index = VectorBruteForce::new(dim);
+
+        index.add_owned(vec![1.0, 0.0, 0.0], 0);
+        index.add_owned(vec![0.0, 1.0, 0.0], 1);
+
+        let empty_set: HashSet<usize> = HashSet::new();
+        index.delete(&empty_set);
+
+        assert_eq!(index.len(), 2);
+    }
+
+    #[test]
+    fn test_delete_all() {
+        let dim = 3;
+        let mut index = VectorBruteForce::new(dim);
+
+        index.add_owned(vec![1.0, 0.0, 0.0], 0);
+        index.add_owned(vec![0.0, 1.0, 0.0], 1);
+
+        let all_ids: HashSet<usize> = HashSet::from([0, 1]);
+        index.delete(&all_ids);
+
+        assert_eq!(index.len(), 0);
+        assert!(index.is_empty());
     }
 }
