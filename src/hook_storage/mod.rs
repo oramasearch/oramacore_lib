@@ -5,6 +5,8 @@ pub enum HookType {
     BeforeRetrieval,
     BeforeAnswer,
     BeforeSearch,
+    TransformDocumentBeforeSave,
+    TransformDocumentAfterSearch,
 }
 
 impl HookType {
@@ -13,6 +15,8 @@ impl HookType {
             Self::BeforeRetrieval => "before_retrieval",
             Self::BeforeAnswer => "before_answer",
             Self::BeforeSearch => "before_search",
+            Self::TransformDocumentBeforeSave => "transform_document_before_save",
+            Self::TransformDocumentAfterSearch => "transform_document_after_search",
         }
     }
 
@@ -21,6 +25,8 @@ impl HookType {
             Self::BeforeRetrieval => "beforeRetrieval",
             Self::BeforeAnswer => "beforeAnswer",
             Self::BeforeSearch => "beforeSearch",
+            Self::TransformDocumentBeforeSave => "transformDocumentBeforeSave",
+            Self::TransformDocumentAfterSearch => "transformDocumentAfterSearch",
         }
     }
 }
@@ -96,6 +102,90 @@ export default { beforeRetrieval }
         assert_eq!(
             reader.get_hook_content(HookType::BeforeRetrieval).unwrap(),
             None
+        );
+    }
+
+    #[tokio::test]
+    async fn test_transform_document_before_save_hook_storage() {
+        let base_dir = generate_new_path();
+        let (tx, mut rx) = mpsc::unbounded_channel::<HookOperation>();
+
+        let writer = HookWriter::try_new(
+            base_dir.clone(),
+            Box::new(move |op| {
+                let tx = tx.clone();
+                Box::pin(async move {
+                    let _ = tx.send(op);
+                })
+            }),
+        )
+        .expect("Failed to create HookWriter");
+
+        let mut reader =
+            HookReader::try_new(base_dir.clone()).expect("Failed to create HookReader");
+
+        let code = r#"
+const transformDocumentBeforeSave = function (docs) { return docs; }
+export default { transformDocumentBeforeSave }
+        "#
+        .to_string();
+
+        writer
+            .insert_hook(HookType::TransformDocumentBeforeSave, code.clone())
+            .await
+            .expect("insert_hook failed");
+
+        let op = rx.recv().await.expect("No operation received");
+        reader.update(op).expect("Reader update failed");
+        reader.commit().expect("Reader commit failed");
+
+        assert_eq!(
+            reader
+                .get_hook_content(HookType::TransformDocumentBeforeSave)
+                .unwrap(),
+            Some(code.clone())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_transform_document_after_search_hook_storage() {
+        let base_dir = generate_new_path();
+        let (tx, mut rx) = mpsc::unbounded_channel::<HookOperation>();
+
+        let writer = HookWriter::try_new(
+            base_dir.clone(),
+            Box::new(move |op| {
+                let tx = tx.clone();
+                Box::pin(async move {
+                    let _ = tx.send(op);
+                })
+            }),
+        )
+        .expect("Failed to create HookWriter");
+
+        let mut reader =
+            HookReader::try_new(base_dir.clone()).expect("Failed to create HookReader");
+
+        let code = r#"
+const transformDocumentAfterSearch = function (results) { return results; }
+export default { transformDocumentAfterSearch }
+        "#
+        .to_string();
+
+        writer
+            .insert_hook(HookType::TransformDocumentAfterSearch, code.clone())
+            .await
+            .expect("insert_hook failed");
+
+        let op = rx.recv().await.expect("No operation received");
+        reader.update(op).expect("Reader update failed");
+        reader.commit().expect("Reader commit failed");
+
+        assert_eq!(
+            reader
+                .get_hook_content(HookType::TransformDocumentAfterSearch)
+                .unwrap(),
+            Some(code.clone())
         );
     }
 }

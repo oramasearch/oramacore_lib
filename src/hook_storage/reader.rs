@@ -26,6 +26,8 @@ struct Status {
     before_retrieval: (Option<String>, bool),
     before_answer: (Option<String>, bool),
     before_search: (Option<String>, bool),
+    transform_document_before_save: (Option<String>, bool),
+    transform_document_after_search: (Option<String>, bool),
 }
 
 impl Status {
@@ -41,6 +43,12 @@ impl Status {
                 HookOperation::Insert(HookType::BeforeSearch, code) => {
                     self.before_search = (Some(code.clone()), true);
                 }
+                HookOperation::Insert(HookType::TransformDocumentBeforeSave, code) => {
+                    self.transform_document_before_save = (Some(code.clone()), true);
+                }
+                HookOperation::Insert(HookType::TransformDocumentAfterSearch, code) => {
+                    self.transform_document_after_search = (Some(code.clone()), true);
+                }
                 HookOperation::Delete(HookType::BeforeRetrieval) => {
                     self.before_retrieval = (None, true);
                 }
@@ -49,6 +57,12 @@ impl Status {
                 }
                 HookOperation::Delete(HookType::BeforeSearch) => {
                     self.before_search = (None, true);
+                }
+                HookOperation::Delete(HookType::TransformDocumentBeforeSave) => {
+                    self.transform_document_before_save = (None, true);
+                }
+                HookOperation::Delete(HookType::TransformDocumentAfterSearch) => {
+                    self.transform_document_after_search = (None, true);
                 }
             }
         }
@@ -75,6 +89,8 @@ impl HookReader {
             before_retrieval: (None, false),
             before_answer: (None, false),
             before_search: (None, false),
+            transform_document_before_save: (None, false),
+            transform_document_after_search: (None, false),
         };
 
         status.apply_operations(&self.pending_operations);
@@ -136,6 +152,46 @@ impl HookReader {
             }
         }
 
+        if status.transform_document_before_save.1 {
+            let file_path = self
+                .data_dir
+                .join(HookType::TransformDocumentBeforeSave.get_file_name());
+            if let Some(code) = status.transform_document_before_save.0 {
+                // Save the code to the file system
+                BufferedFile::create_or_overwrite(file_path)
+                    .context("Cannot open file")?
+                    .write_text_data(&code)
+                    .context("Cannot write code to file")?;
+            } else {
+                // Remove the file from the file system
+                match std::fs::remove_file(&file_path) {
+                    Ok(_) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(HookReaderError::Io(e)),
+                }
+            }
+        }
+
+        if status.transform_document_after_search.1 {
+            let file_path = self
+                .data_dir
+                .join(HookType::TransformDocumentAfterSearch.get_file_name());
+            if let Some(code) = status.transform_document_after_search.0 {
+                // Save the code to the file system
+                BufferedFile::create_or_overwrite(file_path)
+                    .context("Cannot open file")?
+                    .write_text_data(&code)
+                    .context("Cannot write code to file")?;
+            } else {
+                // Remove the file from the file system
+                match std::fs::remove_file(&file_path) {
+                    Ok(_) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(HookReaderError::Io(e)),
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -155,10 +211,12 @@ impl HookReader {
             before_retrieval: (None, false),
             before_answer: (None, false),
             before_search: (None, false),
+            transform_document_before_save: (None, false),
+            transform_document_after_search: (None, false),
         };
         status.apply_operations(&self.pending_operations);
 
-        let mut result = Vec::with_capacity(1);
+        let mut result = Vec::with_capacity(5);
 
         if !status.before_retrieval.1 {
             // if not touched
@@ -216,6 +274,52 @@ impl HookReader {
             result.push((HookType::BeforeSearch, status.before_search.0));
         }
 
+        if !status.transform_document_before_save.1 {
+            // if not touched
+            let file_path = self
+                .data_dir
+                .join(HookType::TransformDocumentBeforeSave.get_file_name());
+            let content = if BufferedFile::exists_as_file(&file_path) {
+                let content = BufferedFile::open(file_path)
+                    .context("Cannot open file")?
+                    .read_text_data()
+                    .context("Cannot write code to file")?;
+                Some(content)
+            } else {
+                None
+            };
+
+            result.push((HookType::TransformDocumentBeforeSave, content));
+        } else {
+            result.push((
+                HookType::TransformDocumentBeforeSave,
+                status.transform_document_before_save.0,
+            ));
+        }
+
+        if !status.transform_document_after_search.1 {
+            // if not touched
+            let file_path = self
+                .data_dir
+                .join(HookType::TransformDocumentAfterSearch.get_file_name());
+            let content = if BufferedFile::exists_as_file(&file_path) {
+                let content = BufferedFile::open(file_path)
+                    .context("Cannot open file")?
+                    .read_text_data()
+                    .context("Cannot write code to file")?;
+                Some(content)
+            } else {
+                None
+            };
+
+            result.push((HookType::TransformDocumentAfterSearch, content));
+        } else {
+            result.push((
+                HookType::TransformDocumentAfterSearch,
+                status.transform_document_after_search.0,
+            ));
+        }
+
         Ok(result)
     }
 }
@@ -238,10 +342,12 @@ mod tests {
         );
 
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 3);
+        assert_eq!(list.len(), 5);
         assert_eq!(list[0].1, None);
         assert_eq!(list[1].1, None);
         assert_eq!(list[2].1, None);
+        assert_eq!(list[3].1, None);
+        assert_eq!(list[4].1, None);
 
         // Insert (pending)
         reader
@@ -256,7 +362,7 @@ mod tests {
             Some(code1.clone())
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 3);
+        assert_eq!(list.len(), 5);
         assert_eq!(list[0], (HookType::BeforeRetrieval, Some(code1.clone())));
         assert_eq!(list[1], (HookType::BeforeAnswer, None));
         assert_eq!(list[2], (HookType::BeforeSearch, None));
@@ -269,7 +375,7 @@ mod tests {
             Some(code1.clone())
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 3);
+        assert_eq!(list.len(), 5);
         assert_eq!(list[0], (HookType::BeforeRetrieval, Some(code1.clone())));
         assert_eq!(list[1], (HookType::BeforeAnswer, None));
         assert_eq!(list[2], (HookType::BeforeSearch, None));
@@ -287,7 +393,7 @@ mod tests {
             Some(code2.clone())
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 3);
+        assert_eq!(list.len(), 5);
         assert_eq!(list[0], (HookType::BeforeRetrieval, Some(code2.clone())));
         assert_eq!(list[1], (HookType::BeforeAnswer, None));
         assert_eq!(list[2], (HookType::BeforeSearch, None));
@@ -304,10 +410,12 @@ mod tests {
             None
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 3);
+        assert_eq!(list.len(), 5);
         assert_eq!(list[0].1, None);
         assert_eq!(list[1].1, None);
         assert_eq!(list[2].1, None);
+        assert_eq!(list[3].1, None);
+        assert_eq!(list[4].1, None);
 
         // Commit
         reader.commit().unwrap();
@@ -317,10 +425,12 @@ mod tests {
             None
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 3);
+        assert_eq!(list.len(), 5);
         assert_eq!(list[0].1, None);
         assert_eq!(list[1].1, None);
         assert_eq!(list[2].1, None);
+        assert_eq!(list[3].1, None);
+        assert_eq!(list[4].1, None);
 
         // Re-insert after delete
         reader
@@ -334,7 +444,7 @@ mod tests {
             Some(code1.clone())
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 3);
+        assert_eq!(list.len(), 5);
         assert_eq!(list[0], (HookType::BeforeRetrieval, Some(code1.clone())));
         assert_eq!(list[1], (HookType::BeforeAnswer, None));
         assert_eq!(list[2], (HookType::BeforeSearch, None));
@@ -346,7 +456,7 @@ mod tests {
             Some(code1.clone())
         );
         let list = reader.list().unwrap();
-        assert_eq!(list.len(), 3);
+        assert_eq!(list.len(), 5);
         assert_eq!(list[0], (HookType::BeforeRetrieval, Some(code1.clone())));
         assert_eq!(list[1], (HookType::BeforeAnswer, None));
         assert_eq!(list[2], (HookType::BeforeSearch, None));

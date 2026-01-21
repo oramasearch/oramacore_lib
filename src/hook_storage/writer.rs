@@ -32,6 +32,8 @@ pub struct HookWriter {
     before_retrieval_presence: AtomicBool,
     before_answer_presence: AtomicBool,
     before_search_presence: AtomicBool,
+    transform_document_before_save_presence: AtomicBool,
+    transform_document_after_search_presence: AtomicBool,
     f: HookOperationCallback,
 }
 
@@ -48,11 +50,27 @@ impl HookWriter {
         let before_search_file = base_dir.join(HookType::BeforeSearch.get_file_name());
         let before_search_presence = BufferedFile::exists_as_file(&before_search_file);
 
+        let transform_document_before_save_file =
+            base_dir.join(HookType::TransformDocumentBeforeSave.get_file_name());
+        let transform_document_before_save_presence =
+            BufferedFile::exists_as_file(&transform_document_before_save_file);
+
+        let transform_document_after_search_file =
+            base_dir.join(HookType::TransformDocumentAfterSearch.get_file_name());
+        let transform_document_after_search_presence =
+            BufferedFile::exists_as_file(&transform_document_after_search_file);
+
         Ok(Self {
             base_dir,
             before_retrieval_presence: AtomicBool::new(before_retrieval_presence),
             before_answer_presence: AtomicBool::new(before_answer_presence),
             before_search_presence: AtomicBool::new(before_search_presence),
+            transform_document_before_save_presence: AtomicBool::new(
+                transform_document_before_save_presence,
+            ),
+            transform_document_after_search_presence: AtomicBool::new(
+                transform_document_after_search_presence,
+            ),
             f,
         })
     }
@@ -110,6 +128,14 @@ impl HookWriter {
             HookType::BeforeSearch => {
                 self.before_search_presence.store(true, Ordering::Relaxed);
             }
+            HookType::TransformDocumentBeforeSave => {
+                self.transform_document_before_save_presence
+                    .store(true, Ordering::Relaxed);
+            }
+            HookType::TransformDocumentAfterSearch => {
+                self.transform_document_after_search_presence
+                    .store(true, Ordering::Relaxed);
+            }
         };
         let path = self.base_dir.join(hook_type.get_file_name());
         BufferedFile::create_or_overwrite(path)?.write_text_data(&code)?;
@@ -133,6 +159,14 @@ impl HookWriter {
                 HookType::BeforeSearch => {
                     self.before_search_presence.store(false, Ordering::Relaxed);
                 }
+                HookType::TransformDocumentBeforeSave => {
+                    self.transform_document_before_save_presence
+                        .store(false, Ordering::Relaxed);
+                }
+                HookType::TransformDocumentAfterSearch => {
+                    self.transform_document_after_search_presence
+                        .store(false, Ordering::Relaxed);
+                }
             },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 // File does not exist, treat as success
@@ -152,6 +186,8 @@ impl HookWriter {
             HookType::BeforeRetrieval,
             HookType::BeforeAnswer,
             HookType::BeforeSearch,
+            HookType::TransformDocumentBeforeSave,
+            HookType::TransformDocumentAfterSearch,
         ];
 
         let mut ret = Vec::with_capacity(types.len());
@@ -195,10 +231,12 @@ mod tests {
 
         // Initially, no hook file should exist
         let hooks = writer.list_hooks().expect("list_hooks failed");
-        assert_eq!(hooks.len(), 3);
+        assert_eq!(hooks.len(), 5);
         assert!(hooks[0].1.is_none());
         assert!(hooks[1].1.is_none());
         assert!(hooks[2].1.is_none());
+        assert!(hooks[3].1.is_none());
+        assert!(hooks[4].1.is_none());
 
         // Insert a hook
         let code = r#"
@@ -213,10 +251,12 @@ export default { beforeRetrieval }
 
         // list_hooks should return the code
         let hooks = writer.list_hooks().expect("list_hooks failed");
-        assert_eq!(hooks.len(), 3);
+        assert_eq!(hooks.len(), 5);
         assert_eq!(hooks[0].1.as_deref(), Some(code.as_str()));
         assert!(hooks[1].1.is_none());
         assert!(hooks[2].1.is_none());
+        assert!(hooks[3].1.is_none());
+        assert!(hooks[4].1.is_none());
 
         // Delete the hook
         writer
@@ -226,10 +266,12 @@ export default { beforeRetrieval }
 
         // list_hooks should return None for content
         let hooks = writer.list_hooks().expect("list_hooks failed");
-        assert_eq!(hooks.len(), 3);
+        assert_eq!(hooks.len(), 5);
         assert!(hooks[0].1.is_none());
         assert!(hooks[1].1.is_none());
         assert!(hooks[2].1.is_none());
+        assert!(hooks[3].1.is_none());
+        assert!(hooks[4].1.is_none());
 
         // Assert closure invocations at the end
         let ops = ops.read().unwrap();
