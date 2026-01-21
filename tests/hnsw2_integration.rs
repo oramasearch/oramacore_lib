@@ -24,7 +24,16 @@ fn create_random_vector(dim: usize) -> Vec<f32> {
 
 fn round_trip_serialize<T>(index: &HNSW2Index<T>) -> HNSW2Index<T>
 where
-    T: serde::Serialize + serde::de::DeserializeOwned + std::hash::Hash + Send + Sync + Ord + std::fmt::Debug + Clone + Copy + Eq,
+    T: serde::Serialize
+        + serde::de::DeserializeOwned
+        + std::hash::Hash
+        + Send
+        + Sync
+        + Ord
+        + std::fmt::Debug
+        + Clone
+        + Copy
+        + Eq,
 {
     let bytes = bincode::serialize(index).expect("Serialization should succeed");
     bincode::deserialize(&bytes).expect("Deserialization should succeed")
@@ -43,8 +52,7 @@ fn create_test_index(n: usize, dim: usize) -> HNSW2Index<u32> {
 fn assert_approx_eq(a: f32, b: f32, epsilon: f32) {
     assert!(
         (a - b).abs() < epsilon,
-        "Expected {} to be approximately equal to {} (epsilon: {})",
-        a, b, epsilon
+        "Expected {a} to be approximately equal to {b} (epsilon: {epsilon})"
     );
 }
 
@@ -202,9 +210,15 @@ fn tc3_5_deleted_item_excluded_from_search() {
     let dim = 8;
     let mut index = HNSW2Index::<u32>::new_with_deletion(dim);
 
-    index.add(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 0).unwrap();
-    index.add(&[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1).unwrap();
-    index.add(&[0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0], 2).unwrap();
+    index
+        .add(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 0)
+        .unwrap();
+    index
+        .add(&[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1)
+        .unwrap();
+    index
+        .add(&[0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0], 2)
+        .unwrap();
     index.build().unwrap();
 
     let target = vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -368,7 +382,7 @@ fn tc5_3_round_trip_index_with_deleted_items() {
     let target = create_random_vector(16);
     let results = deserialized.search(&target, 20);
     for (id, _) in &results {
-        assert!(*id >= 10, "Deleted item {} should not appear in search", id);
+        assert!(*id >= 10, "Deleted item {id} should not appear in search");
     }
 }
 
@@ -409,7 +423,7 @@ fn tc6_1_get_data_returns_all_items() {
     let dim = 4;
     let mut index = HNSW2Index::<u32>::new(dim);
 
-    let vectors = vec![
+    let vectors = [
         vec![1.0, 0.0, 0.0, 0.0],
         vec![0.0, 1.0, 0.0, 0.0],
         vec![0.0, 0.0, 1.0, 0.0],
@@ -449,10 +463,8 @@ fn tc6_4_data_integrity_verification() {
     let dim = 4;
     let mut index = HNSW2Index::<u32>::new(dim);
 
-    let original_vectors: Vec<(u32, Vec<f32>)> = vec![
-        (1, vec![1.0, 2.0, 3.0, 4.0]),
-        (2, vec![5.0, 6.0, 7.0, 8.0]),
-    ];
+    let original_vectors: Vec<(u32, Vec<f32>)> =
+        vec![(1, vec![1.0, 2.0, 3.0, 4.0]), (2, vec![5.0, 6.0, 7.0, 8.0])];
 
     for (id, v) in &original_vectors {
         index.add(v, *id).unwrap();
@@ -463,7 +475,7 @@ fn tc6_4_data_integrity_verification() {
 
     for (id, vec) in &retrieved {
         let original = original_vectors.iter().find(|(oid, _)| oid == id);
-        assert!(original.is_some(), "ID {} should exist", id);
+        assert!(original.is_some(), "ID {id} should exist");
         let (_, original_vec) = original.unwrap();
         assert_eq!(vec.len(), original_vec.len());
         for (a, b) in vec.iter().zip(original_vec.iter()) {
@@ -810,10 +822,10 @@ fn tc_scale_2_serialize_large_index() {
 
     let serialized = bincode::serialize(&index).expect("Serialization should succeed");
 
-    assert!(serialized.len() > 0);
+    assert!(!serialized.is_empty());
 
-    let deserialized: HNSW2Index<u32> = bincode::deserialize(&serialized)
-        .expect("Deserialization should succeed");
+    let deserialized: HNSW2Index<u32> =
+        bincode::deserialize(&serialized).expect("Deserialization should succeed");
 
     assert_eq!(deserialized.len(), n);
     assert_eq!(deserialized.dim(), dim);
@@ -843,8 +855,7 @@ fn tc_scale_3_various_dimensions() {
 
         assert!(
             !results.is_empty() || dim == 0,
-            "Search should return results for dimension {}",
-            dim
+            "Search should return results for dimension {dim}"
         );
 
         for i in 0..25 {
@@ -852,7 +863,11 @@ fn tc_scale_3_various_dimensions() {
         }
         index.force_full_rebuild().unwrap();
 
-        assert_eq!(index.len(), 25, "After rebuild, should have 25 items for dimension {}", dim);
+        assert_eq!(
+            index.len(),
+            25,
+            "After rebuild, should have 25 items for dimension {dim}"
+        );
     }
 }
 
@@ -977,7 +992,7 @@ fn tc_serialization_preserves_all_state() {
     assert_approx_eq(
         health_after.deletion_ratio as f32,
         health_before.deletion_ratio as f32,
-        0.0001
+        0.0001,
     );
 }
 
@@ -1087,10 +1102,7 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     }
 }
 
-fn measure_recall(
-    ground_truth: &[(u32, f32)],
-    search_results: &[(u32, f32)],
-) -> f64 {
+fn measure_recall(ground_truth: &[(u32, f32)], search_results: &[(u32, f32)]) -> f64 {
     if ground_truth.is_empty() {
         return 1.0;
     }
@@ -1118,17 +1130,26 @@ fn test_search_with_root_deleted_no_rebuild() {
 
     let query = create_normalized_vector(dim, 50);
     let results = index.search(&query, 10);
-    assert!(!results.is_empty(), "Search should still return results after root deletion");
+    assert!(
+        !results.is_empty(),
+        "Search should still return results after root deletion"
+    );
 
     for (id, _) in &results {
-        assert_ne!(*id, 0, "Deleted root node should not appear in search results");
+        assert_ne!(
+            *id, 0,
+            "Deleted root node should not appear in search results"
+        );
     }
 
     for seed in 100..110 {
         let q = create_normalized_vector(dim, seed);
         let r = index.search(&q, 5);
-        assert!(!r.is_empty(), "Search {} should return results", seed);
-        assert!(!r.iter().any(|(id, _)| *id == 0), "Root should never appear");
+        assert!(!r.is_empty(), "Search {seed} should return results");
+        assert!(
+            !r.iter().any(|(id, _)| *id == 0),
+            "Root should never appear"
+        );
     }
 }
 
@@ -1154,7 +1175,10 @@ fn test_search_quality_degrades_with_deletions() {
     let search_results = index.search(&query, k);
     let baseline_recall = measure_recall(&ground_truth, &search_results);
 
-    assert!(baseline_recall >= 0.5, "Baseline recall should be at least 0.5, got {}", baseline_recall);
+    assert!(
+        baseline_recall >= 0.5,
+        "Baseline recall should be at least 0.5, got {baseline_recall}"
+    );
 
     let mut recalls: Vec<(f64, f64)> = vec![(0.0, baseline_recall)];
 
@@ -1181,9 +1205,7 @@ fn test_search_quality_degrades_with_deletions() {
 
     assert!(
         last_recall <= first_recall + 0.25,
-        "Recall should not dramatically increase with deletions. Baseline: {}, Final: {}",
-        first_recall,
-        last_recall
+        "Recall should not dramatically increase with deletions. Baseline: {first_recall}, Final: {last_recall}"
     );
 }
 
@@ -1213,8 +1235,7 @@ fn test_multiple_rebuild_cycles_maintain_health() {
         let health = index.analyze_health();
         assert_eq!(
             health.deleted_nodes, 0,
-            "Cycle {}: No deleted nodes after rebuild",
-            cycle
+            "Cycle {cycle}: No deleted nodes after rebuild"
         );
 
         if health.total_nodes > 0 {
@@ -1222,8 +1243,7 @@ fn test_multiple_rebuild_cycles_maintain_health() {
             let results = index.search(&query, 10);
             assert!(
                 !results.is_empty(),
-                "Cycle {}: Search should return results",
-                cycle
+                "Cycle {cycle}: Search should return results"
             );
         }
 
@@ -1277,9 +1297,7 @@ fn test_heavy_churn_alternating_add_delete() {
             for (id, _) in &results {
                 assert!(
                     !deleted_ids.contains(id),
-                    "Round {}: Deleted item {} appeared in search results",
-                    round,
-                    id
+                    "Round {round}: Deleted item {id} appeared in search results"
                 );
             }
         }
@@ -1290,8 +1308,7 @@ fn test_heavy_churn_alternating_add_delete() {
     for (id, _) in &results {
         assert!(
             !deleted_ids.contains(id),
-            "Final check: Deleted item {} appeared in search results",
-            id
+            "Final check: Deleted item {id} appeared in search results"
         );
     }
 
@@ -1332,18 +1349,14 @@ fn test_large_incremental_additions_after_build() {
         let results = index.search(&query, 10);
         assert!(
             !results.is_empty(),
-            "Batch {}: Search should work after adding items",
-            batch
+            "Batch {batch}: Search should work after adding items"
         );
 
-        let all_ids: std::collections::HashSet<u32> =
-            index.get_data().map(|(id, _)| id).collect();
+        let all_ids: std::collections::HashSet<u32> = index.get_data().map(|(id, _)| id).collect();
         for id in batch_start..next_id {
             assert!(
                 all_ids.contains(&id),
-                "Batch {}: Newly added item {} should exist in index",
-                batch,
-                id
+                "Batch {batch}: Newly added item {id} should exist in index"
             );
         }
 
@@ -1353,17 +1366,15 @@ fn test_large_incremental_additions_after_build() {
             .any(|(id, _)| *id >= batch_start && *id < next_id);
         assert!(
             has_new_items,
-            "Batch {}: Search should find some items from new batch",
-            batch
+            "Batch {batch}: Search should find some items from new batch"
         );
     }
 
     assert_eq!(index.len(), 550, "Should have 550 items total");
 
-    let all_ids: std::collections::HashSet<u32> =
-        index.get_data().map(|(id, _)| id).collect();
+    let all_ids: std::collections::HashSet<u32> = index.get_data().map(|(id, _)| id).collect();
     for i in 0..550 {
-        assert!(all_ids.contains(&i), "Item {} should exist", i);
+        assert!(all_ids.contains(&i), "Item {i} should exist");
     }
 }
 
@@ -1417,9 +1428,7 @@ fn test_search_quality_after_partial_repair() {
 
     assert!(
         recall_after >= 0.5,
-        "Recall after partial repair should be at least 50%, got {}. Baseline was {}",
-        recall_after,
-        baseline_recall
+        "Recall after partial repair should be at least 50%, got {recall_after}. Baseline was {baseline_recall}"
     );
 }
 
@@ -1526,7 +1535,11 @@ fn test_delete_heavy_then_regrow() {
     }
 
     index.force_full_rebuild().unwrap();
-    assert_eq!(index.len(), 10, "After rebuild, should have 10 surviving nodes");
+    assert_eq!(
+        index.len(),
+        10,
+        "After rebuild, should have 10 surviving nodes"
+    );
 
     let surviving_ids: std::collections::HashSet<u32> =
         index.get_data().map(|(id, _)| id).collect();
@@ -1538,25 +1551,26 @@ fn test_delete_heavy_then_regrow() {
     }
     index.build().unwrap();
 
-    assert_eq!(index.len(), 210, "Should have 210 total nodes (10 old + 200 new)");
+    assert_eq!(
+        index.len(),
+        210,
+        "Should have 210 total nodes (10 old + 200 new)"
+    );
 
     for &old_id in surviving_ids.iter().take(3) {
         let query = create_normalized_vector(dim, old_id as u64);
         let results = index.search(&query, 5);
         assert!(
             results.iter().any(|(id, _)| *id == old_id),
-            "Old surviving node {} should be findable",
-            old_id
+            "Old surviving node {old_id} should be findable"
         );
     }
 
-    let all_ids: std::collections::HashSet<u32> =
-        index.get_data().map(|(id, _)| id).collect();
+    let all_ids: std::collections::HashSet<u32> = index.get_data().map(|(id, _)| id).collect();
     for new_id in 100..300 {
         assert!(
             all_ids.contains(&new_id),
-            "New node {} should exist in index",
-            new_id
+            "New node {new_id} should exist in index"
         );
     }
 
@@ -1616,9 +1630,7 @@ fn test_state_stability_after_many_operations() {
                 for (id, _) in &results {
                     assert!(
                         !deleted_ids.contains(id),
-                        "Op {}: Deleted item {} in search results",
-                        op,
-                        id
+                        "Op {op}: Deleted item {id} in search results"
                     );
                 }
             }
@@ -1638,8 +1650,7 @@ fn test_state_stability_after_many_operations() {
             assert_eq!(
                 index.len(),
                 health.total_nodes,
-                "Op {}: len() should match health.total_nodes",
-                op
+                "Op {op}: len() should match health.total_nodes"
             );
 
             let serialized = bincode::serialize(&index).unwrap();
@@ -1659,8 +1670,7 @@ fn test_state_stability_after_many_operations() {
     for (id, _) in &results {
         assert!(
             !deleted_ids.contains(id),
-            "Final: Deleted item {} in search results",
-            id
+            "Final: Deleted item {id} in search results"
         );
     }
 }
@@ -1715,18 +1725,27 @@ fn test_serialize_deserialize_across_rebuild_cycles() {
     let query = create_normalized_vector(dim, 50);
 
     let results_before = index_before.search(&query, 10);
-    assert!(!results_before.is_empty(), "Before-rebuild snapshot should search");
+    assert!(
+        !results_before.is_empty(),
+        "Before-rebuild snapshot should search"
+    );
     for (id, _) in &results_before {
-        assert!(*id >= 30, "Before-rebuild: Deleted item {} in results", id);
+        assert!(*id >= 30, "Before-rebuild: Deleted item {id} in results");
     }
 
     let results_after = index_after.search(&query, 10);
-    assert!(!results_after.is_empty(), "After-rebuild snapshot should search");
+    assert!(
+        !results_after.is_empty(),
+        "After-rebuild snapshot should search"
+    );
 
     let mut index_from_before = index_before;
     index_from_before.force_full_rebuild().unwrap();
     let health_rebuilt = index_from_before.analyze_health();
-    assert_eq!(health_rebuilt.deleted_nodes, 0, "Deserialized index should rebuild correctly");
+    assert_eq!(
+        health_rebuilt.deleted_nodes, 0,
+        "Deserialized index should rebuild correctly"
+    );
 }
 
 #[test]
@@ -1745,7 +1764,10 @@ fn test_partial_repair_trigger_and_validation() {
     assert_eq!(health_initial.total_nodes, 200);
     assert_eq!(health_initial.deleted_nodes, 0);
     assert_eq!(health_initial.unreachable_nodes, 0);
-    assert_eq!(health_initial.recommended_strategy, RebuildStrategy::NoAction);
+    assert_eq!(
+        health_initial.recommended_strategy,
+        RebuildStrategy::NoAction
+    );
 
     let delete_count = 14;
     let mut deleted_ids: std::collections::HashSet<u32> = std::collections::HashSet::new();
@@ -1775,7 +1797,10 @@ fn test_partial_repair_trigger_and_validation() {
     );
 
     if result.strategy_used == RebuildStrategy::PartialRepair {
-        assert_eq!(result.nodes_compacted, 0, "PartialRepair should not compact nodes");
+        assert_eq!(
+            result.nodes_compacted, 0,
+            "PartialRepair should not compact nodes"
+        );
     }
 
     let health_after_repair = index.analyze_health();
@@ -1790,8 +1815,7 @@ fn test_partial_repair_trigger_and_validation() {
     for (id, _) in &results {
         assert!(
             !deleted_ids.contains(id),
-            "Deleted ID {} should not appear in search results",
-            id
+            "Deleted ID {id} should not appear in search results"
         );
     }
 
@@ -1799,15 +1823,20 @@ fn test_partial_repair_trigger_and_validation() {
     let deserialized: HNSW2Index<u32> = bincode::deserialize(&serialized).unwrap();
 
     let health_deserialized = deserialized.analyze_health();
-    assert_eq!(health_deserialized.total_nodes, health_after_repair.total_nodes);
-    assert_eq!(health_deserialized.deleted_nodes, health_after_repair.deleted_nodes);
+    assert_eq!(
+        health_deserialized.total_nodes,
+        health_after_repair.total_nodes
+    );
+    assert_eq!(
+        health_deserialized.deleted_nodes,
+        health_after_repair.deleted_nodes
+    );
 
     let results_deserialized = deserialized.search(&query, 50);
     for (id, _) in &results_deserialized {
         assert!(
             !deleted_ids.contains(id),
-            "Deleted ID {} should not appear in deserialized search results",
-            id
+            "Deleted ID {id} should not appear in deserialized search results"
         );
     }
 }
@@ -1862,8 +1891,7 @@ fn test_full_rebuild_at_40_percent_threshold() {
     for (id, _) in &results {
         assert!(
             *id >= 40,
-            "Result ID {} should be >= 40 (surviving range)",
-            id
+            "Result ID {id} should be >= 40 (surviving range)"
         );
     }
 
@@ -1879,10 +1907,10 @@ fn test_full_rebuild_at_40_percent_threshold() {
 
     let all_ids: std::collections::HashSet<u32> = index.get_data().map(|(id, _)| id).collect();
     for i in 40..100 {
-        assert!(all_ids.contains(&i), "Surviving ID {} should exist", i);
+        assert!(all_ids.contains(&i), "Surviving ID {i} should exist");
     }
     for i in 100..140 {
-        assert!(all_ids.contains(&i), "New ID {} should exist", i);
+        assert!(all_ids.contains(&i), "New ID {i} should exist");
     }
 }
 
@@ -1980,11 +2008,7 @@ fn test_graph_connectivity_throughout_lifecycle() {
     for seed in 0..10 {
         let query = create_normalized_vector(dim, 1000 + seed);
         let results = index.search(&query, live_count.min(50));
-        assert!(
-            !results.is_empty(),
-            "Search {} should return results",
-            seed
-        );
+        assert!(!results.is_empty(), "Search {seed} should return results");
     }
 }
 
@@ -2012,8 +2036,7 @@ fn test_search_recall_throughout_lifecycle() {
 
     assert!(
         baseline_recall >= 0.80,
-        "Baseline recall should be at least 0.80, got {}",
-        baseline_recall
+        "Baseline recall should be at least 0.80, got {baseline_recall}"
     );
 
     let mut deleted_ids: std::collections::HashSet<u32> = std::collections::HashSet::new();
@@ -2052,9 +2075,7 @@ fn test_search_recall_throughout_lifecycle() {
 
     assert!(
         recall_after_rebuild >= recall_before_rebuild - 0.15,
-        "Recall after rebuild ({}) should be close to or better than before ({})",
-        recall_after_rebuild,
-        recall_before_rebuild
+        "Recall after rebuild ({recall_after_rebuild}) should be close to or better than before ({recall_before_rebuild})"
     );
 
     for i in 150..250 {
@@ -2070,8 +2091,7 @@ fn test_search_recall_throughout_lifecycle() {
 
     assert!(
         recall_final >= 0.75,
-        "Final recall after full rebuild should be at least 0.75, got {}",
-        recall_final
+        "Final recall after full rebuild should be at least 0.75, got {recall_final}"
     );
 }
 
@@ -2155,14 +2175,13 @@ fn test_large_scale_lifecycle_5000_vectors() {
         let expected_total = 2500 + (batch + 1) * batch_size;
         assert_eq!(
             health.total_nodes, expected_total as usize,
-            "After batch {}, should have {} total nodes",
-            batch, expected_total
+            "After batch {batch}, should have {expected_total} total nodes"
         );
     }
 
     let all_ids: std::collections::HashSet<u32> = index.get_data().map(|(id, _)| id).collect();
     for i in 5000..6000 {
-        assert!(all_ids.contains(&i), "New ID {} should exist", i);
+        assert!(all_ids.contains(&i), "New ID {i} should exist");
     }
 
     let serialized = bincode::serialize(&index).unwrap();
@@ -2214,7 +2233,7 @@ fn test_health_metrics_consistency_across_operations() {
 
     let output = index.search(&target, 10);
     assert_eq!(output.len(), 10);
-    
+
     for i in 100..200 {
         let point = create_normalized_vector(dim, i as u64);
         index.add(&point, i).unwrap();
@@ -2247,7 +2266,10 @@ fn test_health_metrics_consistency_across_operations() {
     let new_output = index.search(&target, 10);
     assert_eq!(new_output.len(), 10);
     for (id, _) in &new_output {
-        assert!(!to_delete.contains(id), "Deleted id {} appeared in search results", id);
+        assert!(
+            !to_delete.contains(id),
+            "Deleted id {id} appeared in search results"
+        );
     }
 
     let serialized = bincode::serialize(&index).unwrap();
@@ -2297,6 +2319,9 @@ fn test_health_metrics_consistency_across_operations() {
     let new_output = deserialized.search(&target, 10);
     assert_eq!(new_output.len(), 10);
     for (id, _) in &new_output {
-        assert!(!to_delete.contains(id), "Deleted id {} appeared in search results", id);
+        assert!(
+            !to_delete.contains(id),
+            "Deleted id {id} appeared in search results"
+        );
     }
 }

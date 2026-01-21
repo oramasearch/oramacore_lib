@@ -120,7 +120,10 @@ impl<
             .map_err(|e| anyhow::anyhow!(e))
     }
 
-    pub fn batch_add<'a, I: Iterator<Item = (impl AsRef<[f32]> + 'a, DocumentId)>>(&mut self, items: I) -> Result<()> {
+    pub fn batch_add<'a, I: Iterator<Item = (impl AsRef<[f32]> + 'a, DocumentId)>>(
+        &mut self,
+        items: I,
+    ) -> Result<()> {
         self.inner
             .batch_add(items.map(|(v, i)| (v, DocumentIdWrapper(i))))
             .map_err(|e| anyhow::anyhow!(e))
@@ -196,9 +199,7 @@ impl<
     /// - PartialRepair: When deletion ratio is 5-40%, repairs broken connections
     /// - FullRebuild: When deletion ratio >= 40%, rebuilds from scratch
     pub fn rebuild(&mut self) -> Result<RebuildResult> {
-        self.inner
-            .rebuild_index()
-            .map_err(|e| anyhow::anyhow!(e))
+        self.inner.rebuild_index().map_err(|e| anyhow::anyhow!(e))
     }
 
     /// Rebuild the index with custom configuration
@@ -567,7 +568,11 @@ mod tests {
         let results = deserialized.search(&target, 20);
 
         for (id, _) in &results {
-            assert!(*id >= 10, "Deleted node {} should not appear in search results", id);
+            assert!(
+                *id >= 10,
+                "Deleted node {} should not appear in search results",
+                id
+            );
         }
     }
 

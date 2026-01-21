@@ -15,9 +15,9 @@ use rand::prelude::*;
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use tracing::info;
 use std::borrow::Cow;
 use std::collections::BinaryHeap;
+use tracing::info;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -165,12 +165,12 @@ pub struct HNSWIndex<E: node::FloatElement, T: node::IdxType> {
     _insertions_since_rebuild: usize, // Count of items added since last rebuild
     _deletions_since_rebuild: usize,  // Count of items deleted since last rebuild
 
-                                 // // use for serde
-                                 // _id2neighbor_tmp: Vec<Vec<Vec<usize>>>,
-                                 // _id2neighbor0_tmp: Vec<Vec<usize>>,
-                                 // _nodes_tmp: Vec<node::Node<E, T>>,
-                                 // _item2id_tmp: Vec<(T, usize)>,
-                                 // _delete_ids_tmp: Vec<usize>,
+                                      // // use for serde
+                                      // _id2neighbor_tmp: Vec<Vec<Vec<usize>>>,
+                                      // _id2neighbor0_tmp: Vec<Vec<usize>>,
+                                      // _nodes_tmp: Vec<node::Node<E, T>>,
+                                      // _item2id_tmp: Vec<(T, usize)>,
+                                      // _delete_ids_tmp: Vec<usize>,
 }
 
 impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
@@ -664,7 +664,13 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
     /// Optimized batch insertion when all items are known upfront.
     /// This method adds all items first without constructing connections,
     /// then builds the graph using optimized buffer-pooled construction.
-    pub fn batch_add<'a, I: Iterator<Item = (impl AsRef<[E]> + 'a, T)>>(&mut self, items: I) -> Result<(), &'static str> where E: 'a {
+    pub fn batch_add<'a, I: Iterator<Item = (impl AsRef<[E]> + 'a, T)>>(
+        &mut self,
+        items: I,
+    ) -> Result<(), &'static str>
+    where
+        E: 'a,
+    {
         for (vs, idx) in items {
             self.add_item_not_constructed(&node::Node::new_with_idx(vs.as_ref(), idx.clone()))?;
         }
@@ -931,7 +937,11 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
     }
 
     /// Add an item without constructing connections, preserving a specific level
-    fn add_item_with_level(&mut self, data: &node::Node<E, T>, level: usize) -> Result<(), &'static str> {
+    fn add_item_with_level(
+        &mut self,
+        data: &node::Node<E, T>,
+        level: usize,
+    ) -> Result<(), &'static str> {
         if data.len() != self._dimension {
             return Err("dimension is different");
         }
@@ -1074,8 +1084,13 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
             0
         };
 
-        let recommended_strategy =
-            self.recommend_rebuild_strategy_internal(config, deletion_ratio, severely_affected_nodes, unreachable_nodes, total_nodes);
+        let recommended_strategy = self.recommend_rebuild_strategy_internal(
+            config,
+            deletion_ratio,
+            severely_affected_nodes,
+            unreachable_nodes,
+            total_nodes,
+        );
 
         GraphHealthMetrics {
             total_nodes,
@@ -1200,7 +1215,10 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
     }
 
     /// Rebuild the index with custom configuration
-    pub fn rebuild_with_config(&mut self, config: &RebuildConfig) -> Result<RebuildResult, &'static str> {
+    pub fn rebuild_with_config(
+        &mut self,
+        config: &RebuildConfig,
+    ) -> Result<RebuildResult, &'static str> {
         let metrics_before = self.analyze_health_with_config(config);
         let strategy = metrics_before.recommended_strategy;
 
@@ -1409,7 +1427,8 @@ impl<E: node::FloatElement, T: node::IdxType> HNSWIndex<E, T> {
                         if self.is_deleted(neigh) {
                             continue;
                         }
-                        let neigh_dist = self.get_distance_from_vec(self.get_data(neigh), node_data);
+                        let neigh_dist =
+                            self.get_distance_from_vec(self.get_data(neigh), node_data);
                         let cur_dist = self.get_distance_from_vec(self.get_data(cur_id), node_data);
                         if neigh_dist < cur_dist {
                             drop(cur_neighs);
@@ -1620,7 +1639,9 @@ impl<E: node::FloatElement, T: node::IdxType> Serialize for HNSWIndex<E, T> {
     }
 }
 
-impl<E: node::FloatElement + DeserializeOwned, T: node::IdxType + DeserializeOwned> HNSWIndex<E, T> {
+impl<E: node::FloatElement + DeserializeOwned, T: node::IdxType + DeserializeOwned>
+    HNSWIndex<E, T>
+{
     /// Deserialize from bincode bytes with backward compatibility for legacy format.
     /// Use this method when loading data that may have been serialized with an older version.
     pub fn deserialize_bincode_compat(bytes: &[u8]) -> Result<Self, Box<bincode::ErrorKind>> {
@@ -1635,12 +1656,26 @@ impl<E: node::FloatElement + DeserializeOwned, T: node::IdxType + DeserializeOwn
     }
 
     fn from_dump(dump: HNSWIndexDump<E, T>) -> Result<Self, Box<bincode::ErrorKind>> {
-        let _nodes: Vec<_> = dump._nodes_tmp.into_iter().map(|x| x.into_owned()).collect();
-        let _id2neighbor = dump._id2neighbor_tmp.into_iter()
+        let _nodes: Vec<_> = dump
+            ._nodes_tmp
+            .into_iter()
+            .map(|x| x.into_owned())
+            .collect();
+        let _id2neighbor = dump
+            ._id2neighbor_tmp
+            .into_iter()
             .map(|x| x.into_iter().map(RwLock::new).collect::<Vec<_>>())
             .collect::<Vec<_>>();
-        let _id2neighbor0 = dump._id2neighbor0_tmp.into_iter().map(RwLock::new).collect::<Vec<_>>();
-        let _item2id = dump._item2id_tmp.into_iter().map(|(k, v)| (k.into_owned(), v)).collect::<HashMap<_, _>>();
+        let _id2neighbor0 = dump
+            ._id2neighbor0_tmp
+            .into_iter()
+            .map(RwLock::new)
+            .collect::<Vec<_>>();
+        let _item2id = dump
+            ._item2id_tmp
+            .into_iter()
+            .map(|(k, v)| (k.into_owned(), v))
+            .collect::<HashMap<_, _>>();
         let _delete_ids = dump._delete_ids_tmp.into_iter().collect::<HashSet<_>>();
 
         Ok(Self {
@@ -1669,12 +1704,26 @@ impl<E: node::FloatElement + DeserializeOwned, T: node::IdxType + DeserializeOwn
     }
 
     fn from_legacy_dump(dump: HNSWIndexDumpLegacy<E, T>) -> Result<Self, Box<bincode::ErrorKind>> {
-        let _nodes: Vec<_> = dump._nodes_tmp.into_iter().map(|x| x.into_owned()).collect();
-        let _id2neighbor = dump._id2neighbor_tmp.into_iter()
+        let _nodes: Vec<_> = dump
+            ._nodes_tmp
+            .into_iter()
+            .map(|x| x.into_owned())
+            .collect();
+        let _id2neighbor = dump
+            ._id2neighbor_tmp
+            .into_iter()
             .map(|x| x.into_iter().map(RwLock::new).collect::<Vec<_>>())
             .collect::<Vec<_>>();
-        let _id2neighbor0 = dump._id2neighbor0_tmp.into_iter().map(RwLock::new).collect::<Vec<_>>();
-        let _item2id = dump._item2id_tmp.into_iter().map(|(k, v)| (k.into_owned(), v)).collect::<HashMap<_, _>>();
+        let _id2neighbor0 = dump
+            ._id2neighbor0_tmp
+            .into_iter()
+            .map(RwLock::new)
+            .collect::<Vec<_>>();
+        let _item2id = dump
+            ._item2id_tmp
+            .into_iter()
+            .map(|(k, v)| (k.into_owned(), v))
+            .collect::<HashMap<_, _>>();
         let _delete_ids = dump._delete_ids_tmp.into_iter().collect::<HashSet<_>>();
 
         Ok(Self {
@@ -2009,7 +2058,12 @@ mod hsnw_tests {
             }
             let neighbors = index._id2neighbor0[id].read().unwrap();
             for &n in neighbors.iter() {
-                assert!(!index.is_deleted(n), "Found deleted node {} in neighbors of {}", n, id);
+                assert!(
+                    !index.is_deleted(n),
+                    "Found deleted node {} in neighbors of {}",
+                    n,
+                    id
+                );
             }
         }
     }
@@ -2051,20 +2105,15 @@ mod hsnw_tests {
         }
 
         // Search before rebuild
-        let _results_before: Vec<Vec<usize>> = targets
-            .iter()
-            .map(|t| index.search(t, 10))
-            .collect();
+        let _results_before: Vec<Vec<usize>> =
+            targets.iter().map(|t| index.search(t, 10)).collect();
 
         // Rebuild
         let result = index.rebuild_index().unwrap();
         assert_eq!(result.strategy_used, RebuildStrategy::FullRebuild);
 
         // Search after rebuild
-        let results_after: Vec<Vec<usize>> = targets
-            .iter()
-            .map(|t| index.search(t, 10))
-            .collect();
+        let results_after: Vec<Vec<usize>> = targets.iter().map(|t| index.search(t, 10)).collect();
 
         // After rebuild, all results should be valid (no deleted nodes)
         for results in &results_after {
@@ -2075,7 +2124,10 @@ mod hsnw_tests {
 
         // Results should not be empty
         for results in &results_after {
-            assert!(!results.is_empty(), "Search returned no results after rebuild");
+            assert!(
+                !results.is_empty(),
+                "Search returned no results after rebuild"
+            );
         }
     }
 
@@ -2110,8 +2162,10 @@ mod hsnw_tests {
         let result = index.rebuild_with_config(&config).unwrap();
 
         // Verify the rebuild completed successfully
-        assert!(result.strategy_used == RebuildStrategy::PartialRepair
-            || result.strategy_used == RebuildStrategy::NoAction);
+        assert!(
+            result.strategy_used == RebuildStrategy::PartialRepair
+                || result.strategy_used == RebuildStrategy::NoAction
+        );
 
         // After repair, verify index is still functional
         let normal = Uniform::new(0.0, 10.0).unwrap();
@@ -2120,7 +2174,10 @@ mod hsnw_tests {
 
         // All results should be live nodes
         for id in &results {
-            assert!(!index.is_deleted(*id), "Search returned deleted node after repair");
+            assert!(
+                !index.is_deleted(*id),
+                "Search returned deleted node after repair"
+            );
         }
     }
 
@@ -2139,7 +2196,7 @@ mod hsnw_tests {
             skip_threshold: 0.05,
             full_rebuild_threshold: 0.40,
             connection_loss_threshold: 0.05, // 5% connection loss triggers repair
-            min_connections: 3, // Higher requirement to trigger more repairs
+            min_connections: 3,              // Higher requirement to trigger more repairs
             detect_unreachable: true,
         };
 
@@ -2152,7 +2209,10 @@ mod hsnw_tests {
         let normal = Uniform::new(0.0, 10.0).unwrap();
         let target: Vec<f32> = (0..16).map(|_| normal.sample(&mut rand::rng())).collect();
         let results = index.search(&target, 10);
-        assert!(!results.is_empty(), "Search returned no results after partial repair");
+        assert!(
+            !results.is_empty(),
+            "Search returned no results after partial repair"
+        );
     }
 
     #[test]
@@ -2177,8 +2237,12 @@ mod hsnw_tests {
             }
             let neighbors = index._id2neighbor0[id].read().unwrap();
             for &n in neighbors.iter() {
-                assert!(!index.is_deleted(n),
-                    "Found deleted node {} in neighbors of {} after repair", n, id);
+                assert!(
+                    !index.is_deleted(n),
+                    "Found deleted node {} in neighbors of {} after repair",
+                    n,
+                    id
+                );
             }
         }
     }
@@ -2199,7 +2263,8 @@ mod hsnw_tests {
 
         // Delete those neighbors
         for &n in &neighbors_to_delete {
-            if n != 0 { // Don't delete root
+            if n != 0 {
+                // Don't delete root
                 let _ = index.delete_id(n);
             }
         }
@@ -2213,14 +2278,21 @@ mod hsnw_tests {
         // Verify the node has valid connections after repair
         let neighbors = index._id2neighbor0[test_node].read().unwrap();
         for &n in neighbors.iter() {
-            assert!(!index.is_deleted(n),
-                "Repaired node {} still has deleted neighbor {}", test_node, n);
+            assert!(
+                !index.is_deleted(n),
+                "Repaired node {} still has deleted neighbor {}",
+                test_node,
+                n
+            );
         }
 
         // The node should still be searchable
         let node_data = index.get_data(test_node);
         let search_results = index.search_knn(node_data, 10).unwrap();
-        assert!(!search_results.is_empty(), "Node should be findable after repair");
+        assert!(
+            !search_results.is_empty(),
+            "Node should be findable after repair"
+        );
     }
 
     #[test]
@@ -2251,7 +2323,10 @@ mod hsnw_tests {
         let target: Vec<f32> = (0..16).map(|_| normal.sample(&mut rand::rng())).collect();
         let results = index.search(&target, 10);
 
-        assert!(!results.is_empty(), "Search should work after rebuilding with root deleted");
+        assert!(
+            !results.is_empty(),
+            "Search should work after rebuilding with root deleted"
+        );
 
         // All results should be valid
         for id in &results {
@@ -2320,7 +2395,11 @@ mod hsnw_tests {
 
         // All unreachable nodes should be live (not deleted)
         for &node_id in &unreachable_after {
-            assert!(!index.is_deleted(node_id), "Unreachable node {} should be live", node_id);
+            assert!(
+                !index.is_deleted(node_id),
+                "Unreachable node {} should be live",
+                node_id
+            );
         }
     }
 
@@ -2355,7 +2434,8 @@ mod hsnw_tests {
         let unreachable_after = index.find_unreachable_nodes();
 
         // If there were unreachable nodes and partial repair was used, they should be fixed
-        if result.strategy_used == RebuildStrategy::PartialRepair && !unreachable_before.is_empty() {
+        if result.strategy_used == RebuildStrategy::PartialRepair && !unreachable_before.is_empty()
+        {
             assert!(
                 unreachable_after.len() <= unreachable_before.len(),
                 "Unreachable nodes should decrease or stay same after repair"
@@ -2388,10 +2468,8 @@ mod hsnw_tests {
         }
 
         // Search before rebuild (capture for potential comparison)
-        let _results_before: Vec<Vec<usize>> = targets
-            .iter()
-            .map(|t| index.search(t, 10))
-            .collect();
+        let _results_before: Vec<Vec<usize>> =
+            targets.iter().map(|t| index.search(t, 10)).collect();
 
         // Use config that triggers partial repair
         let config = RebuildConfig {
@@ -2405,10 +2483,7 @@ mod hsnw_tests {
         let _result = index.rebuild_with_config(&config).unwrap();
 
         // Search after rebuild
-        let results_after: Vec<Vec<usize>> = targets
-            .iter()
-            .map(|t| index.search(t, 10))
-            .collect();
+        let results_after: Vec<Vec<usize>> = targets.iter().map(|t| index.search(t, 10)).collect();
 
         // All results should be valid (no deleted nodes)
         for results in &results_after {
@@ -2419,7 +2494,10 @@ mod hsnw_tests {
 
         // Results should not be empty
         for results in &results_after {
-            assert!(!results.is_empty(), "Search returned no results after partial repair");
+            assert!(
+                !results.is_empty(),
+                "Search returned no results after partial repair"
+            );
         }
     }
 
@@ -2516,7 +2594,9 @@ mod hsnw_tests {
         assert_eq!(index.len(), 100);
 
         // Verify search works
-        let target: Vec<f32> = (0..dimension).map(|_| normal.sample(&mut rand::rng())).collect();
+        let target: Vec<f32> = (0..dimension)
+            .map(|_| normal.sample(&mut rand::rng()))
+            .collect();
         let results = index.search(&target, 10);
         assert_eq!(results.len(), 10);
     }
@@ -2536,7 +2616,8 @@ mod hsnw_tests {
             .collect();
 
         // Index using regular add
-        let mut regular_index = HNSWIndex::<f32, usize>::new(dimension, &HNSWParams::<f32>::default());
+        let mut regular_index =
+            HNSWIndex::<f32, usize>::new(dimension, &HNSWParams::<f32>::default());
         for (i, sample) in samples.iter().enumerate() {
             regular_index.add(sample, i).unwrap();
         }
@@ -2548,13 +2629,18 @@ mod hsnw_tests {
             .enumerate()
             .map(|(i, s)| (s.as_slice(), i))
             .collect();
-        let mut batch_index = HNSWIndex::<f32, usize>::new(dimension, &HNSWParams::<f32>::default());
+        let mut batch_index =
+            HNSWIndex::<f32, usize>::new(dimension, &HNSWParams::<f32>::default());
         batch_index.batch_add(items.into_iter()).unwrap();
         batch_index.build(Metric::Euclidean).unwrap();
 
         // Compare search results - both should be functional
         let targets: Vec<Vec<f32>> = (0..10)
-            .map(|_| (0..dimension).map(|_| normal.sample(&mut rand::rng())).collect())
+            .map(|_| {
+                (0..dimension)
+                    .map(|_| normal.sample(&mut rand::rng()))
+                    .collect()
+            })
             .collect();
 
         for target in &targets {
