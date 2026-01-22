@@ -180,8 +180,6 @@ impl HookWriter {
     }
 
     pub fn list_hooks(&self) -> Result<Vec<(HookType, Option<String>)>, HookWriterError> {
-        // For each HookType variant, check if the corresponding file exists
-        // Currently only BeforeRetrieval exists, but this is future-proofed
         let types = vec![
             HookType::BeforeRetrieval,
             HookType::BeforeAnswer,
@@ -201,6 +199,16 @@ impl HookWriter {
         }
 
         Ok(ret)
+    }
+
+    pub fn get_hook_content(&self, hook_type: HookType) -> Result<Option<String>, HookWriterError> {
+        let path = self.base_dir.join(hook_type.get_file_name());
+
+        let content = BufferedFile::open(path)
+            .and_then(|f| f.read_text_data())
+            .ok();
+
+        Ok(content)
     }
 }
 
