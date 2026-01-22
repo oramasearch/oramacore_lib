@@ -81,14 +81,14 @@ impl HookWriter {
         code: String,
     ) -> Result<(), HookWriterError> {
         // We don't care about the input and output. We just want to check is the hook function is there
-        let executor = JSExecutor::<(), ()>::try_new(
-            code.to_string(),
-            Some(vec![]),
-            Duration::from_millis(100),
-            true,
-            hook_type.get_function_name().to_string(),
-        )
-        .await;
+        let executor: Result<JSExecutor<(), ()>, JSRunnerError> =
+            JSExecutor::builder(code.to_string(), hook_type.get_function_name().to_string())
+                .allowed_hosts(vec![])
+                .timeout(Duration::from_millis(100))
+                .is_async(true)
+                .build()
+                .await;
+
         match executor {
             Err(JSRunnerError::DefaultExportIsNotAnObject) => {
                 return Err(HookWriterError::ExportError(

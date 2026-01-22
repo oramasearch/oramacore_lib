@@ -2613,8 +2613,6 @@ dependencies = [
 [[package]]
 name = "orama-js-pool"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b7839d60fe3ed2111aa8fe49ce130f97cdbed798e5df6febea0c3e089e21405"
 dependencies = [
  "async-channel",
  "deno_console",
