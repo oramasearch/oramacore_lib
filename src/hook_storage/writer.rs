@@ -358,4 +358,34 @@ export default { beforeRetrieval }
             "Default exported `beforeRetrieval` should be a function".to_string()
         );
     }
+
+    #[tokio::test]
+    async fn test_hook_writer_persistency() {
+        let base_dir = generate_new_path();
+
+        let code = r#"
+const beforeRetrieval = function () { }
+export default { beforeRetrieval }
+"#
+        .to_string();
+
+        let dummy_f = Box::new(move |_: HookOperation| async move {}.boxed());
+        let writer = HookWriter::try_new(base_dir.clone(), dummy_f)
+            .expect("Failed to create first HookWriter");
+
+        writer
+            .insert_hook(HookType::BeforeRetrieval, code.clone())
+            .await
+            .expect("insert_hook failed");
+
+        // Create a new HookWriter with the same base_dir and verify persistence
+        let dummy_f = Box::new(move |_: HookOperation| async move {}.boxed());
+        let writer = HookWriter::try_new(base_dir.clone(), dummy_f)
+            .expect("Failed to create second HookWriter");
+
+        let content = writer
+            .get_hook_content(HookType::BeforeRetrieval)
+            .expect("get_hook_content failed");
+        assert_eq!(content.as_deref(), Some(code.as_str()));
+    }
 }
