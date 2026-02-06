@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use crate::fs::*;
 use anyhow::Context;
-use orama_js_pool::JSRunnerError;
 use thiserror::Error;
 
 use super::{HookOperation, HookType};
@@ -13,8 +12,6 @@ pub enum HookReaderError {
     Io(std::io::Error),
     #[error("generic {0:?}")]
     Generic(#[from] anyhow::Error),
-    #[error("generic {0:?}")]
-    JSError(#[from] JSRunnerError),
 }
 
 pub struct HookReader {

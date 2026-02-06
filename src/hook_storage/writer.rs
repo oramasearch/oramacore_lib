@@ -1,9 +1,7 @@
 use super::{HookOperation, HookType};
 use crate::fs::*;
-use orama_js_pool::{JSExecutor, JSRunnerError};
 use std::future::Future;
 use std::pin::Pin;
-use std::time::Duration;
 use std::{
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
@@ -16,11 +14,6 @@ pub enum HookWriterError {
     FSError(#[from] std::io::Error),
     #[error("Unknown error: {0:?}")]
     Generic(#[from] anyhow::Error),
-
-    #[error("Export error: {0}")]
-    ExportError(String),
-    #[error("Compilation error: {0}")]
-    CompilationError(String),
 }
 
 // Type alias for the hook operation callback
@@ -80,43 +73,6 @@ impl HookWriter {
         hook_type: HookType,
         code: String,
     ) -> Result<(), HookWriterError> {
-        // We don't care about the input and output. We just want to check is the hook function is there
-        let executor: Result<JSExecutor<(), ()>, JSRunnerError> =
-            JSExecutor::builder(code.to_string(), hook_type.get_function_name().to_string())
-                .allowed_hosts(vec![])
-                .timeout(Duration::from_millis(100))
-                .is_async(true)
-                .build()
-                .await;
-
-        match executor {
-            Err(JSRunnerError::DefaultExportIsNotAnObject) => {
-                return Err(HookWriterError::ExportError(
-                    "Default export is not an object".to_string(),
-                ));
-            }
-            Err(JSRunnerError::NoExportedFunction(fn_name)) => {
-                return Err(HookWriterError::ExportError(format!(
-                    "Default export doesn't contain `{fn_name}` property"
-                )));
-            }
-            Err(JSRunnerError::ExportedElementNotAFunction) => {
-                return Err(HookWriterError::ExportError(format!(
-                    "Default exported `{}` should be a function",
-                    hook_type.get_function_name()
-                )));
-            }
-            Err(JSRunnerError::CompilationError(e)) => {
-                return Err(HookWriterError::CompilationError(e.exception_message));
-            }
-            Err(e) => {
-                return Err(HookWriterError::Generic(anyhow::anyhow!(
-                    "Unknown JS error {e:?}"
-                )));
-            }
-            Ok(_) => {}
-        };
-
         match hook_type {
             HookType::BeforeRetrieval => {
                 self.before_retrieval_presence
@@ -210,6 +166,20 @@ impl HookWriter {
 
         Ok(content)
     }
+
+    pub fn has_hook(&self, hook_type: HookType) -> bool {
+        match hook_type {
+            HookType::BeforeRetrieval => self.before_retrieval_presence.load(Ordering::Relaxed),
+            HookType::BeforeAnswer => self.before_answer_presence.load(Ordering::Relaxed),
+            HookType::BeforeSearch => self.before_search_presence.load(Ordering::Relaxed),
+            HookType::TransformDocumentBeforeSave => self
+                .transform_document_before_save_presence
+                .load(Ordering::Relaxed),
+            HookType::TransformDocumentAfterSearch => self
+                .transform_document_after_search_presence
+                .load(Ordering::Relaxed),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -291,72 +261,6 @@ export default { beforeRetrieval }
             ops[1],
             HookOperation::Delete(HookType::BeforeRetrieval)
         ));
-    }
-
-    #[tokio::test]
-    async fn test_hook_writer_errors() {
-        let base_dir = generate_new_path();
-
-        let dummy_f = Box::new(move |_: HookOperation| async move {}.boxed());
-
-        let writer =
-            HookWriter::try_new(base_dir.clone(), dummy_f).expect("Failed to create HookWriter");
-
-        let code = r#"console.log('hello');"#.to_string();
-        let err: HookWriterError = writer
-            .insert_hook(HookType::BeforeRetrieval, code.clone())
-            .await
-            .unwrap_err();
-        let HookWriterError::ExportError(s) = err else {
-            panic!("No HookWriterError::ExportError");
-        };
-        assert_eq!(s, "Default export is not an object".to_string());
-
-        let code = r#"
-export default function () {}
-        "#
-        .to_string();
-        let err: HookWriterError = writer
-            .insert_hook(HookType::BeforeRetrieval, code.clone())
-            .await
-            .unwrap_err();
-        let HookWriterError::ExportError(s) = err else {
-            panic!("No HookWriterError::ExportError");
-        };
-        assert_eq!(s, "Default export is not an object".to_string());
-
-        let code = r#"
-export default { }
-        "#
-        .to_string();
-        let err: HookWriterError = writer
-            .insert_hook(HookType::BeforeRetrieval, code.clone())
-            .await
-            .unwrap_err();
-        let HookWriterError::ExportError(s) = err else {
-            panic!("No HookWriterError::ExportError");
-        };
-        assert_eq!(
-            s,
-            "Default export doesn't contain `beforeRetrieval` property".to_string()
-        );
-
-        let code = r#"
-const beforeRetrieval = 42
-export default { beforeRetrieval }
-        "#
-        .to_string();
-        let err: HookWriterError = writer
-            .insert_hook(HookType::BeforeRetrieval, code.clone())
-            .await
-            .unwrap_err();
-        let HookWriterError::ExportError(s) = err else {
-            panic!("No HookWriterError::ExportError");
-        };
-        assert_eq!(
-            s,
-            "Default exported `beforeRetrieval` should be a function".to_string()
-        );
     }
 
     #[tokio::test]
