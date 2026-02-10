@@ -1,9 +1,7 @@
 use super::{HookOperation, HookType};
 use crate::fs::*;
-use orama_js_pool::{JSExecutor, JSRunnerError};
 use std::future::Future;
 use std::pin::Pin;
-use std::time::Duration;
 use std::{
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
@@ -16,11 +14,6 @@ pub enum HookWriterError {
     FSError(#[from] std::io::Error),
     #[error("Unknown error: {0:?}")]
     Generic(#[from] anyhow::Error),
-
-    #[error("Export error: {0}")]
-    ExportError(String),
-    #[error("Compilation error: {0}")]
-    CompilationError(String),
 }
 
 // Type alias for the hook operation callback
@@ -32,6 +25,8 @@ pub struct HookWriter {
     before_retrieval_presence: AtomicBool,
     before_answer_presence: AtomicBool,
     before_search_presence: AtomicBool,
+    transform_document_before_save_presence: AtomicBool,
+    transform_document_after_search_presence: AtomicBool,
     f: HookOperationCallback,
 }
 
@@ -48,11 +43,27 @@ impl HookWriter {
         let before_search_file = base_dir.join(HookType::BeforeSearch.get_file_name());
         let before_search_presence = BufferedFile::exists_as_file(&before_search_file);
 
+        let transform_document_before_save_file =
+            base_dir.join(HookType::TransformDocumentBeforeSave.get_file_name());
+        let transform_document_before_save_presence =
+            BufferedFile::exists_as_file(&transform_document_before_save_file);
+
+        let transform_document_after_search_file =
+            base_dir.join(HookType::TransformDocumentAfterSearch.get_file_name());
+        let transform_document_after_search_presence =
+            BufferedFile::exists_as_file(&transform_document_after_search_file);
+
         Ok(Self {
             base_dir,
             before_retrieval_presence: AtomicBool::new(before_retrieval_presence),
             before_answer_presence: AtomicBool::new(before_answer_presence),
             before_search_presence: AtomicBool::new(before_search_presence),
+            transform_document_before_save_presence: AtomicBool::new(
+                transform_document_before_save_presence,
+            ),
+            transform_document_after_search_presence: AtomicBool::new(
+                transform_document_after_search_presence,
+            ),
             f,
         })
     }
@@ -62,43 +73,6 @@ impl HookWriter {
         hook_type: HookType,
         code: String,
     ) -> Result<(), HookWriterError> {
-        // We don't care about the input and output. We just want to check is the hook function is there
-        let executor = JSExecutor::<(), ()>::try_new(
-            code.to_string(),
-            Some(vec![]),
-            Duration::from_millis(100),
-            true,
-            hook_type.get_function_name().to_string(),
-        )
-        .await;
-        match executor {
-            Err(JSRunnerError::DefaultExportIsNotAnObject) => {
-                return Err(HookWriterError::ExportError(
-                    "Default export is not an object".to_string(),
-                ));
-            }
-            Err(JSRunnerError::NoExportedFunction(fn_name)) => {
-                return Err(HookWriterError::ExportError(format!(
-                    "Default export doesn't contain `{fn_name}` property"
-                )));
-            }
-            Err(JSRunnerError::ExportedElementNotAFunction) => {
-                return Err(HookWriterError::ExportError(format!(
-                    "Default exported `{}` should be a function",
-                    hook_type.get_function_name()
-                )));
-            }
-            Err(JSRunnerError::CompilationError(e)) => {
-                return Err(HookWriterError::CompilationError(e.exception_message));
-            }
-            Err(e) => {
-                return Err(HookWriterError::Generic(anyhow::anyhow!(
-                    "Unknown JS error {e:?}"
-                )));
-            }
-            Ok(_) => {}
-        };
-
         match hook_type {
             HookType::BeforeRetrieval => {
                 self.before_retrieval_presence
@@ -109,6 +83,14 @@ impl HookWriter {
             }
             HookType::BeforeSearch => {
                 self.before_search_presence.store(true, Ordering::Relaxed);
+            }
+            HookType::TransformDocumentBeforeSave => {
+                self.transform_document_before_save_presence
+                    .store(true, Ordering::Relaxed);
+            }
+            HookType::TransformDocumentAfterSearch => {
+                self.transform_document_after_search_presence
+                    .store(true, Ordering::Relaxed);
             }
         };
         let path = self.base_dir.join(hook_type.get_file_name());
@@ -133,6 +115,14 @@ impl HookWriter {
                 HookType::BeforeSearch => {
                     self.before_search_presence.store(false, Ordering::Relaxed);
                 }
+                HookType::TransformDocumentBeforeSave => {
+                    self.transform_document_before_save_presence
+                        .store(false, Ordering::Relaxed);
+                }
+                HookType::TransformDocumentAfterSearch => {
+                    self.transform_document_after_search_presence
+                        .store(false, Ordering::Relaxed);
+                }
             },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 // File does not exist, treat as success
@@ -146,12 +136,12 @@ impl HookWriter {
     }
 
     pub fn list_hooks(&self) -> Result<Vec<(HookType, Option<String>)>, HookWriterError> {
-        // For each HookType variant, check if the corresponding file exists
-        // Currently only BeforeRetrieval exists, but this is future-proofed
         let types = vec![
             HookType::BeforeRetrieval,
             HookType::BeforeAnswer,
             HookType::BeforeSearch,
+            HookType::TransformDocumentBeforeSave,
+            HookType::TransformDocumentAfterSearch,
         ];
 
         let mut ret = Vec::with_capacity(types.len());
@@ -165,6 +155,30 @@ impl HookWriter {
         }
 
         Ok(ret)
+    }
+
+    pub fn get_hook_content(&self, hook_type: HookType) -> Result<Option<String>, HookWriterError> {
+        let path = self.base_dir.join(hook_type.get_file_name());
+
+        let content = BufferedFile::open(path)
+            .and_then(|f| f.read_text_data())
+            .ok();
+
+        Ok(content)
+    }
+
+    pub fn has_hook(&self, hook_type: HookType) -> bool {
+        match hook_type {
+            HookType::BeforeRetrieval => self.before_retrieval_presence.load(Ordering::Relaxed),
+            HookType::BeforeAnswer => self.before_answer_presence.load(Ordering::Relaxed),
+            HookType::BeforeSearch => self.before_search_presence.load(Ordering::Relaxed),
+            HookType::TransformDocumentBeforeSave => self
+                .transform_document_before_save_presence
+                .load(Ordering::Relaxed),
+            HookType::TransformDocumentAfterSearch => self
+                .transform_document_after_search_presence
+                .load(Ordering::Relaxed),
+        }
     }
 }
 
@@ -195,10 +209,12 @@ mod tests {
 
         // Initially, no hook file should exist
         let hooks = writer.list_hooks().expect("list_hooks failed");
-        assert_eq!(hooks.len(), 3);
+        assert_eq!(hooks.len(), 5);
         assert!(hooks[0].1.is_none());
         assert!(hooks[1].1.is_none());
         assert!(hooks[2].1.is_none());
+        assert!(hooks[3].1.is_none());
+        assert!(hooks[4].1.is_none());
 
         // Insert a hook
         let code = r#"
@@ -213,10 +229,12 @@ export default { beforeRetrieval }
 
         // list_hooks should return the code
         let hooks = writer.list_hooks().expect("list_hooks failed");
-        assert_eq!(hooks.len(), 3);
+        assert_eq!(hooks.len(), 5);
         assert_eq!(hooks[0].1.as_deref(), Some(code.as_str()));
         assert!(hooks[1].1.is_none());
         assert!(hooks[2].1.is_none());
+        assert!(hooks[3].1.is_none());
+        assert!(hooks[4].1.is_none());
 
         // Delete the hook
         writer
@@ -226,10 +244,12 @@ export default { beforeRetrieval }
 
         // list_hooks should return None for content
         let hooks = writer.list_hooks().expect("list_hooks failed");
-        assert_eq!(hooks.len(), 3);
+        assert_eq!(hooks.len(), 5);
         assert!(hooks[0].1.is_none());
         assert!(hooks[1].1.is_none());
         assert!(hooks[2].1.is_none());
+        assert!(hooks[3].1.is_none());
+        assert!(hooks[4].1.is_none());
 
         // Assert closure invocations at the end
         let ops = ops.read().unwrap();
@@ -244,68 +264,32 @@ export default { beforeRetrieval }
     }
 
     #[tokio::test]
-    async fn test_hook_writer_errors() {
+    async fn test_hook_writer_persistency() {
         let base_dir = generate_new_path();
 
-        let dummy_f = Box::new(move |_: HookOperation| async move {}.boxed());
-
-        let writer =
-            HookWriter::try_new(base_dir.clone(), dummy_f).expect("Failed to create HookWriter");
-
-        let code = r#"console.log('hello');"#.to_string();
-        let err: HookWriterError = writer
-            .insert_hook(HookType::BeforeRetrieval, code.clone())
-            .await
-            .unwrap_err();
-        let HookWriterError::ExportError(s) = err else {
-            panic!("No HookWriterError::ExportError");
-        };
-        assert_eq!(s, "Default export is not an object".to_string());
-
         let code = r#"
-export default function () {}
-        "#
-        .to_string();
-        let err: HookWriterError = writer
-            .insert_hook(HookType::BeforeRetrieval, code.clone())
-            .await
-            .unwrap_err();
-        let HookWriterError::ExportError(s) = err else {
-            panic!("No HookWriterError::ExportError");
-        };
-        assert_eq!(s, "Default export is not an object".to_string());
-
-        let code = r#"
-export default { }
-        "#
-        .to_string();
-        let err: HookWriterError = writer
-            .insert_hook(HookType::BeforeRetrieval, code.clone())
-            .await
-            .unwrap_err();
-        let HookWriterError::ExportError(s) = err else {
-            panic!("No HookWriterError::ExportError");
-        };
-        assert_eq!(
-            s,
-            "Default export doesn't contain `beforeRetrieval` property".to_string()
-        );
-
-        let code = r#"
-const beforeRetrieval = 42
+const beforeRetrieval = function () { }
 export default { beforeRetrieval }
-        "#
+"#
         .to_string();
-        let err: HookWriterError = writer
+
+        let dummy_f = Box::new(move |_: HookOperation| async move {}.boxed());
+        let writer = HookWriter::try_new(base_dir.clone(), dummy_f)
+            .expect("Failed to create first HookWriter");
+
+        writer
             .insert_hook(HookType::BeforeRetrieval, code.clone())
             .await
-            .unwrap_err();
-        let HookWriterError::ExportError(s) = err else {
-            panic!("No HookWriterError::ExportError");
-        };
-        assert_eq!(
-            s,
-            "Default exported `beforeRetrieval` should be a function".to_string()
-        );
+            .expect("insert_hook failed");
+
+        // Create a new HookWriter with the same base_dir and verify persistence
+        let dummy_f = Box::new(move |_: HookOperation| async move {}.boxed());
+        let writer = HookWriter::try_new(base_dir.clone(), dummy_f)
+            .expect("Failed to create second HookWriter");
+
+        let content = writer
+            .get_hook_content(HookType::BeforeRetrieval)
+            .expect("get_hook_content failed");
+        assert_eq!(content.as_deref(), Some(code.as_str()));
     }
 }

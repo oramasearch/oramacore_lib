@@ -5,6 +5,8 @@ pub enum HookType {
     BeforeRetrieval,
     BeforeAnswer,
     BeforeSearch,
+    TransformDocumentBeforeSave,
+    TransformDocumentAfterSearch,
 }
 
 impl HookType {
@@ -13,6 +15,8 @@ impl HookType {
             Self::BeforeRetrieval => "before_retrieval",
             Self::BeforeAnswer => "before_answer",
             Self::BeforeSearch => "before_search",
+            Self::TransformDocumentBeforeSave => "transform_document_before_save",
+            Self::TransformDocumentAfterSearch => "transform_document_after_search",
         }
     }
 
@@ -21,6 +25,8 @@ impl HookType {
             Self::BeforeRetrieval => "beforeRetrieval",
             Self::BeforeAnswer => "beforeAnswer",
             Self::BeforeSearch => "beforeSearch",
+            Self::TransformDocumentBeforeSave => "transformDocumentBeforeSave",
+            Self::TransformDocumentAfterSearch => "transformDocumentAfterSearch",
         }
     }
 }
