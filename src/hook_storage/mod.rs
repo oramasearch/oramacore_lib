@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy, Hash)]
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy, Hash, PartialOrd, Ord)]
 pub enum HookType {
     BeforeRetrieval,
     BeforeAnswer,
