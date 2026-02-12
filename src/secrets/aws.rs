@@ -25,6 +25,9 @@ pub struct AwsSecretsConfig {
     pub access_key_id: Option<String>,
     /// Optional explicit AWS secret access key. If omitted, uses the default credential chain.
     pub secret_access_key: Option<String>,
+    /// Optional custom endpoint URL for AWS-compatible services (e.g. LocalStack: "http://localhost:4566").
+    /// If omitted, the default AWS endpoint is used.
+    pub endpoint_url: Option<String>,
 }
 
 fn default_ttl() -> std::time::Duration {
@@ -42,7 +45,7 @@ impl AwsSecretsProvider {
     pub async fn try_new(config: &AwsSecretsConfig) -> Result<Self> {
         let region = aws_sdk_secretsmanager::config::Region::new(config.region.clone());
 
-        let aws_config = if let (Some(access_key_id), Some(secret_access_key)) =
+        let mut aws_config_loader = if let (Some(access_key_id), Some(secret_access_key)) =
             (&config.access_key_id, &config.secret_access_key)
         {
             // Use explicit credentials
@@ -56,16 +59,20 @@ impl AwsSecretsProvider {
             aws_config::from_env()
                 .region(region)
                 .credentials_provider(credentials)
-                .load()
-                .await
         } else {
             // Use default credential chain (env vars, instance profile, etc.)
-            aws_config::from_env().region(region).load().await
+            aws_config::from_env().region(region)
         };
 
+        // Set custom endpoint URL if provided (e.g. for LocalStack)
+        if let Some(endpoint_url) = &config.endpoint_url {
+            aws_config_loader = aws_config_loader.endpoint_url(endpoint_url);
+        }
+
+        let aws_config = aws_config_loader.load().await;
         let client = Client::new(&aws_config);
 
-        info!(region = %config.region, "AWS Secrets Manager provider initialized");
+        info!(region = %config.region, endpoint_url = ?config.endpoint_url, "AWS Secrets Manager provider initialized");
 
         Ok(Self { client })
     }
