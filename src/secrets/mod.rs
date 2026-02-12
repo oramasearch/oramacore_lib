@@ -1,5 +1,5 @@
 pub mod aws;
-pub mod cache;
+mod cache;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,8 +26,9 @@ pub trait SecretsProvider: Send + Sync {
 }
 
 /// Service that manages secrets from multiple providers with caching.
+/// Lazily refreshes on access when the TTL expires.
 pub struct SecretsService {
-    cache: Arc<SecretsCache>,
+    cache: SecretsCache,
 }
 
 impl SecretsService {
@@ -56,7 +57,6 @@ impl SecretsService {
         let cache = SecretsCache::try_new(providers, ttl)
             .await
             .context("Failed to initialize secrets cache")?;
-        let cache = Arc::new(cache);
 
         info!("Secrets service initialized");
 
