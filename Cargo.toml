@@ -40,6 +40,11 @@ debug_panic = "0.2.1"
 tokio-util = { version = "0.7", features = ["io"] }
 chrono = { version = "0.4" }
 
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-secretsmanager = "1"
+async-trait = "0.1"
+duration-str = "0.20.0"
+
 tempfile = { version = "3", optional = true }
 pulp = "0.21.5"
 
