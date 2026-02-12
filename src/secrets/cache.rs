@@ -15,7 +15,7 @@ struct CacheData {
 
 /// In-memory cache for secrets fetched from external providers.
 /// Lazily refreshes on access when the TTL expires.
-pub struct SecretsCache {
+pub(super) struct SecretsCache {
     data: RwLock<CacheData>,
     providers: Vec<Box<dyn SecretsProvider>>,
     ttl: Duration,
@@ -24,7 +24,7 @@ pub struct SecretsCache {
 impl SecretsCache {
     /// Creates a new SecretsCache with the given providers and TTL.
     /// Performs an initial fetch to populate the cache.
-    pub async fn try_new(
+    pub(super) async fn try_new(
         providers: Vec<Box<dyn SecretsProvider>>,
         ttl: Duration,
     ) -> anyhow::Result<Self> {
@@ -55,7 +55,7 @@ impl SecretsCache {
 
     /// Refreshes the cache by fetching from all providers.
     /// On failure, logs the error and keeps stale data (graceful degradation).
-    pub async fn refresh(&self) {
+    async fn refresh(&self) {
         let mut new_secrets = HashMap::new();
         let mut had_error = false;
 
@@ -87,7 +87,10 @@ impl SecretsCache {
     /// Gets secrets for a specific collection by filtering on the `oramacore_{collection_id}_` prefix
     /// and stripping that prefix from the keys.
     /// Performs a lazy refresh if the cache is expired.
-    pub async fn get_for_collection(&self, collection_id: &str) -> Arc<HashMap<String, String>> {
+    pub(super) async fn get_for_collection(
+        &self,
+        collection_id: &str,
+    ) -> Arc<HashMap<String, String>> {
         if self.is_expired().await {
             self.refresh().await;
         }
