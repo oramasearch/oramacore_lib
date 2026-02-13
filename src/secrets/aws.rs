@@ -8,7 +8,7 @@ use tracing::{info, warn};
 
 use super::SecretsProvider;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct AwsSecretsConfig {
     pub region: String,
     #[serde(
@@ -19,6 +19,24 @@ pub struct AwsSecretsConfig {
     pub access_key_id: Option<String>,
     pub secret_access_key: Option<String>,
     pub endpoint_url: Option<String>,
+}
+
+impl std::fmt::Debug for AwsSecretsConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AwsSecretsConfig")
+            .field("region", &self.region)
+            .field("ttl", &self.ttl)
+            .field(
+                "access_key_id",
+                &self.access_key_id.as_deref().map(|_| "*****"),
+            )
+            .field(
+                "secret_access_key",
+                &self.secret_access_key.as_deref().map(|_| "*****"),
+            )
+            .field("endpoint_url", &self.endpoint_url)
+            .finish()
+    }
 }
 
 fn default_ttl() -> std::time::Duration {

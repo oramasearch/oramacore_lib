@@ -7,10 +7,18 @@ use tracing::info;
 
 use super::SecretsProvider;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct LocalSecretsConfig {
     /// Key format: `{collection_id}_{secret_key}`.
     pub secrets: HashMap<String, String>,
+}
+
+impl std::fmt::Debug for LocalSecretsConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LocalSecretsConfig")
+            .field("secrets", &format!("[{} entries]", self.secrets.len()))
+            .finish()
+    }
 }
 
 /// In-memory secrets provider. Static set of secrets, never changes on refresh.
