@@ -8,7 +8,7 @@ use tracing::{debug, info, warn};
 
 use crate::fs::{BufferedFile, create_if_not_exists};
 
-use super::{ValuesDump, MAX_KEYS, validate_key, validate_value};
+use super::{MAX_KEYS, ValuesDump, validate_key, validate_value};
 
 #[derive(Error, Debug)]
 pub enum ValuesWriterError {
