@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub const MAX_KEYS: usize = 100;
-pub const MIN_VALUE_SIZE: usize = 1;
-pub const MAX_VALUE_SIZE: usize = 10 * 1024;
+pub const MAX_VALUE_LENGTH: usize = 10 * 1024;
 pub const MAX_KEY_LENGTH: usize = 128;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -28,9 +27,8 @@ pub fn validate_key(key: &str) -> Result<()> {
 
 /// Validates a value.
 pub fn validate_value(value: &str) -> Result<()> {
-    let size = value.len();
-    if !(MIN_VALUE_SIZE..=MAX_VALUE_SIZE).contains(&size) {
-        bail!("Value must be {MIN_VALUE_SIZE}-{MAX_VALUE_SIZE} bytes");
+    if value.len() > MAX_VALUE_LENGTH {
+        bail!("Value must be at most {MAX_VALUE_LENGTH} characters");
     }
     Ok(())
 }
@@ -59,13 +57,13 @@ mod tests {
 
     #[test]
     fn test_validate_value_valid() {
+        assert!(validate_value("").is_ok());
         assert!(validate_value("a").is_ok());
         assert!(validate_value(&"x".repeat(10 * 1024)).is_ok());
     }
 
     #[test]
     fn test_validate_value_invalid() {
-        assert!(validate_value("").is_err());
         assert!(validate_value(&"x".repeat(10 * 1024 + 1)).is_err());
     }
 }
