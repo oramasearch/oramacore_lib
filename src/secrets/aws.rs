@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use aws_sdk_secretsmanager::Client;
+use redact::Secret;
 use serde::Deserialize;
 use tracing::{info, warn};
 
 use super::SecretsProvider;
 
-#[derive(Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AwsSecretsConfig {
     pub region: String,
     #[serde(
@@ -16,27 +17,9 @@ pub struct AwsSecretsConfig {
         default = "default_ttl"
     )]
     pub ttl: std::time::Duration,
-    pub access_key_id: Option<String>,
-    pub secret_access_key: Option<String>,
+    pub access_key_id: Secret<String>,
+    pub secret_access_key: Secret<String>,
     pub endpoint_url: Option<String>,
-}
-
-impl std::fmt::Debug for AwsSecretsConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AwsSecretsConfig")
-            .field("region", &self.region)
-            .field("ttl", &self.ttl)
-            .field(
-                "access_key_id",
-                &self.access_key_id.as_deref().map(|_| "*****"),
-            )
-            .field(
-                "secret_access_key",
-                &self.secret_access_key.as_deref().map(|_| "*****"),
-            )
-            .field("endpoint_url", &self.endpoint_url)
-            .finish()
-    }
 }
 
 fn default_ttl() -> std::time::Duration {
@@ -53,22 +36,16 @@ impl AwsSecretsProvider {
     pub async fn try_new(config: &AwsSecretsConfig) -> Result<Self> {
         let region = aws_sdk_secretsmanager::config::Region::new(config.region.clone());
 
-        let mut aws_config_loader = if let (Some(access_key_id), Some(secret_access_key)) =
-            (&config.access_key_id, &config.secret_access_key)
-        {
-            let credentials = aws_sdk_secretsmanager::config::Credentials::new(
-                access_key_id,
-                secret_access_key,
-                None,
-                None,
-                "oramacore-secrets",
-            );
-            aws_config::from_env()
-                .region(region)
-                .credentials_provider(credentials)
-        } else {
-            aws_config::from_env().region(region)
-        };
+        let credentials = aws_sdk_secretsmanager::config::Credentials::new(
+            config.access_key_id.expose_secret(),
+            config.secret_access_key.expose_secret(),
+            None,
+            None,
+            "oramacore-secrets",
+        );
+        let mut aws_config_loader = aws_config::from_env()
+            .region(region)
+            .credentials_provider(credentials);
 
         if let Some(endpoint_url) = &config.endpoint_url {
             aws_config_loader = aws_config_loader.endpoint_url(endpoint_url);

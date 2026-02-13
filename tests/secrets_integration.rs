@@ -2,6 +2,7 @@ use aws_credential_types::Credentials;
 use aws_credential_types::provider::SharedCredentialsProvider;
 use aws_sdk_secretsmanager::Client;
 use aws_sdk_secretsmanager::config::{BehaviorVersion, Region};
+use redact::Secret;
 use testcontainers::core::{ContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
@@ -58,8 +59,8 @@ async fn setup_localstack_secrets(
         aws: Some(AwsSecretsConfig {
             region: "us-east-1".to_string(),
             ttl,
-            access_key_id: Some("test".to_string()),
-            secret_access_key: Some("test".to_string()),
+            access_key_id: Secret::new("test".to_string()),
+            secret_access_key: Secret::new("test".to_string()),
             endpoint_url: Some(endpoint_url),
         }),
         local: None,

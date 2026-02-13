@@ -44,6 +44,7 @@ aws-config = { version = "1", features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = "1"
 async-trait = "0.1"
 duration-str = "0.20.0"
+redact = { version = "0.1", features = ["serde"] }
 
 tempfile = { version = "3", optional = true }
 pulp = "0.21.5"
