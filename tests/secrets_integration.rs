@@ -8,12 +8,16 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 
 use oramacore_lib::secrets::aws::AwsSecretsConfig;
-use oramacore_lib::secrets::{SecretsManagerConfig, SecretsService};
+use oramacore_lib::secrets::{SecretsProviderConfig, SecretsService};
 
 async fn setup_localstack_secrets(
     seed_secrets: Vec<(&str, &str)>,
     ttl: std::time::Duration,
-) -> (ContainerAsync<GenericImage>, Client, SecretsManagerConfig) {
+) -> (
+    ContainerAsync<GenericImage>,
+    Client,
+    Vec<SecretsProviderConfig>,
+) {
     let localstack_port = 4566;
 
     let container = GenericImage::new("localstack/localstack", "latest")
@@ -55,16 +59,13 @@ async fn setup_localstack_secrets(
             .unwrap_or_else(|e| panic!("Failed to seed secret '{name}': {e}"));
     }
 
-    let secrets_config = SecretsManagerConfig {
-        aws: Some(AwsSecretsConfig {
-            region: "us-east-1".to_string(),
-            ttl,
-            access_key_id: Secret::new("test".to_string()),
-            secret_access_key: Secret::new("test".to_string()),
-            endpoint_url: Some(endpoint_url),
-        }),
-        local: None,
-    };
+    let secrets_config = vec![SecretsProviderConfig::Aws(AwsSecretsConfig {
+        region: "us-east-1".to_string(),
+        ttl,
+        access_key_id: Secret::new("test".to_string()),
+        secret_access_key: Secret::new("test".to_string()),
+        endpoint_url: Some(endpoint_url),
+    })];
 
     (container, client, secrets_config)
 }
