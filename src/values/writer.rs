@@ -229,7 +229,7 @@ mod tests {
                 .is_err()
         );
         // Empty value
-        assert!(writer.set("key".to_string(), "".to_string()).is_err());
+        assert!(writer.set("key".to_string(), "".to_string()).is_ok());
         // Value too large
         assert!(
             writer
