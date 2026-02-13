@@ -8,7 +8,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::Deserialize;
-use tracing::info;
+use tracing::{info, warn};
 
 use aws::AwsSecretsConfig;
 use cache::SecretsCache;
@@ -33,6 +33,13 @@ pub struct SecretsService {
 }
 
 impl SecretsService {
+    pub fn empty() -> Arc<Self> {
+        warn!("No secrets providers configured, secrets service will return empty results");
+        Arc::new(Self {
+            cache: SecretsCache::empty(),
+        })
+    }
+
     pub async fn try_new(config: SecretsManagerConfig) -> Result<Arc<Self>> {
         let mut providers: Vec<Box<dyn SecretsProvider>> = Vec::new();
         let mut ttl = std::time::Duration::from_secs(300);
@@ -51,9 +58,7 @@ impl SecretsService {
         }
 
         if providers.is_empty() {
-            anyhow::bail!(
-                "No secrets providers configured. At least one provider (e.g., aws, local) must be specified."
-            );
+            return Ok(Self::empty());
         }
 
         let cache = SecretsCache::try_new(providers, ttl)

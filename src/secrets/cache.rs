@@ -44,6 +44,17 @@ pub(super) struct SecretsCache {
 }
 
 impl SecretsCache {
+    pub(super) fn empty() -> Self {
+        Self {
+            data: RwLock::new(CacheData {
+                per_collection: HashMap::new(),
+                last_refresh: tokio::time::Instant::now(),
+            }),
+            providers: Vec::new(),
+            ttl: Duration::MAX,
+        }
+    }
+
     pub(super) async fn try_new(
         providers: Vec<Box<dyn SecretsProvider>>,
         ttl: Duration,
