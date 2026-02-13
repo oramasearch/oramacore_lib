@@ -39,34 +39,21 @@ fn wrap_in_arc(
 
 pub(super) struct SecretsCache {
     data: RwLock<CacheData>,
-    providers: Vec<Box<dyn SecretsProvider>>,
+    provider: Box<dyn SecretsProvider>,
     ttl: Duration,
 }
 
 impl SecretsCache {
-    pub(super) fn empty() -> Self {
-        Self {
-            data: RwLock::new(CacheData {
-                per_collection: HashMap::new(),
-                last_refresh: tokio::time::Instant::now(),
-            }),
-            providers: Vec::new(),
-            ttl: Duration::MAX,
-        }
-    }
-
     pub(super) async fn try_new(
-        providers: Vec<Box<dyn SecretsProvider>>,
+        provider: Box<dyn SecretsProvider>,
         ttl: Duration,
     ) -> anyhow::Result<Self> {
         let mut grouped: HashMap<String, HashMap<String, String>> = HashMap::new();
-        for provider in &providers {
-            let raw = provider
-                .fetch_raw_secrets()
-                .await
-                .context("Failed initial secrets fetch")?;
-            group_raw_secrets(provider.as_ref(), &raw, &mut grouped);
-        }
+        let raw = provider
+            .fetch_raw_secrets()
+            .await
+            .context("Failed initial secrets fetch")?;
+        group_raw_secrets(provider.as_ref(), &raw, &mut grouped);
 
         let total: usize = grouped.values().map(|m| m.len()).sum();
         info!(
@@ -81,33 +68,25 @@ impl SecretsCache {
                 per_collection,
                 last_refresh: tokio::time::Instant::now(),
             }),
-            providers,
+            provider,
             ttl,
         })
     }
 
     async fn refresh(&self) {
-        let mut grouped: HashMap<String, HashMap<String, String>> = HashMap::new();
-        let mut had_error = false;
-
-        for provider in &self.providers {
-            match provider.fetch_raw_secrets().await {
-                Ok(raw) => {
-                    group_raw_secrets(provider.as_ref(), &raw, &mut grouped);
-                }
-                Err(e) => {
-                    error!(error = %e, "Failed to refresh secrets from provider, keeping stale data");
-                    had_error = true;
-                }
+        match self.provider.fetch_raw_secrets().await {
+            Ok(raw) => {
+                let mut grouped: HashMap<String, HashMap<String, String>> = HashMap::new();
+                group_raw_secrets(self.provider.as_ref(), &raw, &mut grouped);
+                let per_collection = wrap_in_arc(grouped);
+                let mut data = self.data.write().await;
+                data.per_collection = per_collection;
+                data.last_refresh = tokio::time::Instant::now();
+                info!("Secrets cache refreshed successfully");
             }
-        }
-
-        if !had_error {
-            let per_collection = wrap_in_arc(grouped);
-            let mut data = self.data.write().await;
-            data.per_collection = per_collection;
-            data.last_refresh = tokio::time::Instant::now();
-            info!("Secrets cache refreshed successfully");
+            Err(e) => {
+                error!(error = %e, "Failed to refresh secrets from provider, keeping stale data");
+            }
         }
     }
 
@@ -167,7 +146,7 @@ mod tests {
             secrets,
             prefix: "test",
         };
-        let cache = SecretsCache::try_new(vec![Box::new(provider)], Duration::from_secs(300))
+        let cache = SecretsCache::try_new(Box::new(provider), Duration::from_secs(300))
             .await
             .expect("Failed to create cache");
 
@@ -190,7 +169,7 @@ mod tests {
             secrets: HashMap::new(),
             prefix: "test",
         };
-        let cache = SecretsCache::try_new(vec![Box::new(provider)], Duration::from_secs(300))
+        let cache = SecretsCache::try_new(Box::new(provider), Duration::from_secs(300))
             .await
             .expect("Failed to create cache");
 
