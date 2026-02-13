@@ -20,10 +20,13 @@ fn group_raw_secrets(
 ) {
     for (key, value) in raw {
         if let Some((collection_id, secret_key)) = provider.parse_key(key) {
-            grouped
-                .entry(collection_id.to_string())
-                .or_default()
-                .insert(secret_key.to_string(), value.clone());
+            if let Some(map) = grouped.get_mut(collection_id) {
+                map.insert(secret_key.to_string(), value.clone());
+            } else {
+                let mut map = HashMap::new();
+                map.insert(secret_key.to_string(), value.clone());
+                grouped.insert(collection_id.to_string(), map);
+            }
         }
     }
 }
