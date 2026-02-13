@@ -84,21 +84,20 @@ impl SecretsProvider for AwsSecretsProvider {
                 .context("Failed to list secrets from AWS Secrets Manager")?;
 
             for secret_entry in response.secret_list() {
-                let secret_name = match secret_entry.name() {
-                    Some(name) => name.to_string(),
-                    None => continue,
+                let Some(secret_name) = secret_entry.name() else {
+                    continue;
                 };
 
                 match self
                     .client
                     .get_secret_value()
-                    .secret_id(&secret_name)
+                    .secret_id(secret_name)
                     .send()
                     .await
                 {
                     Ok(value_response) => {
                         if let Some(secret_string) = value_response.secret_string() {
-                            secrets.insert(secret_name, secret_string.to_string());
+                            secrets.insert(secret_name.to_string(), secret_string.to_string());
                         }
                     }
                     Err(e) => {
