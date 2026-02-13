@@ -26,6 +26,8 @@ fn default_ttl() -> std::time::Duration {
     std::time::Duration::from_secs(300)
 }
 
+pub const PROVIDER_NAME: &str = "oramacore-secrets";
+
 /// Fetches secrets with the `oramacore_` prefix from AWS Secrets Manager.
 /// Key format: `oramacore_{collection_id}_{secret_key}`.
 pub struct AwsSecretsProvider {
@@ -41,7 +43,7 @@ impl AwsSecretsProvider {
             config.secret_access_key.expose_secret(),
             None,
             None,
-            "oramacore-secrets",
+            PROVIDER_NAME,
         );
         let mut aws_config_loader = aws_config::from_env()
             .region(region)
