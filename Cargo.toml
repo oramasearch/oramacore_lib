@@ -40,6 +40,12 @@ debug_panic = "0.2.1"
 tokio-util = { version = "0.7", features = ["io"] }
 chrono = { version = "0.4" }
 
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-secretsmanager = "1"
+async-trait = "0.1"
+duration-str = "0.20.0"
+redact = { version = "0.1", features = ["serde"] }
+
 tempfile = { version = "3", optional = true }
 pulp = "0.21.5"
 
@@ -48,6 +54,8 @@ tempfile = { version = "3" }
 criterion = { version = "0.5.1", features = ["async_tokio"] }
 rallo = { version = "0.5" }
 approx = "0.5.1"
+testcontainers = "0.27.0"
+aws-credential-types = "1"
 
 [features]
 no_thread = []
