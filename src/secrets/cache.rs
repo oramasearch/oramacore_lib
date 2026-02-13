@@ -2,19 +2,38 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::Context;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use super::SecretsProvider;
 
-/// Internal cache data holding the fetched secrets and the timestamp of the last refresh.
 struct CacheData {
-    secrets: HashMap<String, String>,
+    per_collection: HashMap<String, Arc<HashMap<String, String>>>,
     last_refresh: tokio::time::Instant,
 }
 
-/// In-memory cache for secrets fetched from external providers.
-/// Lazily refreshes on access when the TTL expires.
+fn group_raw_secrets(
+    provider: &dyn SecretsProvider,
+    raw: &HashMap<String, String>,
+    grouped: &mut HashMap<String, HashMap<String, String>>,
+) {
+    for (key, value) in raw {
+        if let Some((collection_id, secret_key)) = provider.parse_key(key) {
+            grouped
+                .entry(collection_id.to_string())
+                .or_default()
+                .insert(secret_key.to_string(), value.clone());
+        }
+    }
+}
+
+fn wrap_in_arc(
+    grouped: HashMap<String, HashMap<String, String>>,
+) -> HashMap<String, Arc<HashMap<String, String>>> {
+    grouped.into_iter().map(|(k, v)| (k, Arc::new(v))).collect()
+}
+
 pub(super) struct SecretsCache {
     data: RwLock<CacheData>,
     providers: Vec<Box<dyn SecretsProvider>>,
@@ -22,30 +41,30 @@ pub(super) struct SecretsCache {
 }
 
 impl SecretsCache {
-    /// Creates a new SecretsCache with the given providers and TTL.
-    /// Performs an initial fetch to populate the cache.
     pub(super) async fn try_new(
         providers: Vec<Box<dyn SecretsProvider>>,
         ttl: Duration,
     ) -> anyhow::Result<Self> {
-        let mut initial_secrets = HashMap::new();
+        let mut grouped: HashMap<String, HashMap<String, String>> = HashMap::new();
         for provider in &providers {
-            match provider.fetch_all_oramacore_secrets().await {
-                Ok(secrets) => initial_secrets.extend(secrets),
-                Err(e) => {
-                    return Err(e).context("Failed initial secrets fetch");
-                }
-            }
+            let raw = provider
+                .fetch_raw_secrets()
+                .await
+                .context("Failed initial secrets fetch")?;
+            group_raw_secrets(provider.as_ref(), &raw, &mut grouped);
         }
 
+        let total: usize = grouped.values().map(|m| m.len()).sum();
         info!(
-            count = initial_secrets.len(),
+            count = total,
             "Secrets cache initialized with initial fetch"
         );
 
+        let per_collection = wrap_in_arc(grouped);
+
         Ok(Self {
             data: RwLock::new(CacheData {
-                secrets: initial_secrets,
+                per_collection,
                 last_refresh: tokio::time::Instant::now(),
             }),
             providers,
@@ -53,15 +72,15 @@ impl SecretsCache {
         })
     }
 
-    /// Refreshes the cache by fetching from all providers.
-    /// On failure, logs the error and keeps stale data (graceful degradation).
     async fn refresh(&self) {
-        let mut new_secrets = HashMap::new();
+        let mut grouped: HashMap<String, HashMap<String, String>> = HashMap::new();
         let mut had_error = false;
 
         for provider in &self.providers {
-            match provider.fetch_all_oramacore_secrets().await {
-                Ok(secrets) => new_secrets.extend(secrets),
+            match provider.fetch_raw_secrets().await {
+                Ok(raw) => {
+                    group_raw_secrets(provider.as_ref(), &raw, &mut grouped);
+                }
                 Err(e) => {
                     error!(error = %e, "Failed to refresh secrets from provider, keeping stale data");
                     had_error = true;
@@ -69,24 +88,20 @@ impl SecretsCache {
             }
         }
 
-        // Only update if all providers succeeded, otherwise keep stale data
         if !had_error {
+            let per_collection = wrap_in_arc(grouped);
             let mut data = self.data.write().await;
-            data.secrets = new_secrets;
+            data.per_collection = per_collection;
             data.last_refresh = tokio::time::Instant::now();
             info!("Secrets cache refreshed successfully");
         }
     }
 
-    /// Returns whether the cache TTL has expired.
     async fn is_expired(&self) -> bool {
         let data = self.data.read().await;
         data.last_refresh.elapsed() > self.ttl
     }
 
-    /// Gets secrets for a specific collection by filtering on the `oramacore_{collection_id}_` prefix
-    /// and stripping that prefix from the keys.
-    /// Performs a lazy refresh if the cache is expired.
     pub(super) async fn get_for_collection(
         &self,
         collection_id: &str,
@@ -95,69 +110,62 @@ impl SecretsCache {
             self.refresh().await;
         }
 
-        let prefix = format!("oramacore_{collection_id}_");
         let data = self.data.read().await;
-
-        let filtered: HashMap<String, String> = data
-            .secrets
-            .iter()
-            .filter_map(|(key, value)| {
-                key.strip_prefix(&prefix)
-                    .map(|stripped_key| (stripped_key.to_string(), value.clone()))
-            })
-            .collect();
-
-        Arc::new(filtered)
+        data.per_collection
+            .get(collection_id)
+            .cloned()
+            .unwrap_or_default()
     }
 }
-
-use anyhow::Context;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use async_trait::async_trait;
 
-    /// Mock provider for testing
     struct MockProvider {
         secrets: HashMap<String, String>,
+        prefix: &'static str,
     }
 
     #[async_trait]
     impl SecretsProvider for MockProvider {
-        async fn fetch_all_oramacore_secrets(&self) -> anyhow::Result<HashMap<String, String>> {
+        async fn fetch_raw_secrets(&self) -> anyhow::Result<HashMap<String, String>> {
             Ok(self.secrets.clone())
+        }
+
+        fn parse_key<'a>(&self, key: &'a str) -> Option<(&'a str, &'a str)> {
+            let rest = key.strip_prefix(self.prefix)?.strip_prefix('_')?;
+            let idx = rest.find('_')?;
+            Some((&rest[..idx], &rest[idx + 1..]))
         }
     }
 
     #[tokio::test]
-    async fn test_cache_filters_by_collection_prefix() {
+    async fn test_cache_filters_by_collection() {
         let mut secrets = HashMap::new();
-        secrets.insert("oramacore_col1_API_KEY".to_string(), "key123".to_string());
-        secrets.insert(
-            "oramacore_col1_DB_HOST".to_string(),
-            "localhost".to_string(),
-        );
-        secrets.insert("oramacore_col2_API_KEY".to_string(), "key456".to_string());
+        secrets.insert("test_col1_API_KEY".to_string(), "key123".to_string());
+        secrets.insert("test_col1_DB_HOST".to_string(), "localhost".to_string());
+        secrets.insert("test_col2_API_KEY".to_string(), "key456".to_string());
         secrets.insert("unrelated_secret".to_string(), "value".to_string());
 
-        let provider = MockProvider { secrets };
+        let provider = MockProvider {
+            secrets,
+            prefix: "test",
+        };
         let cache = SecretsCache::try_new(vec![Box::new(provider)], Duration::from_secs(300))
             .await
             .expect("Failed to create cache");
 
-        // Get secrets for collection 1
         let col1_secrets = cache.get_for_collection("col1").await;
         assert_eq!(col1_secrets.len(), 2);
         assert_eq!(col1_secrets.get("API_KEY").unwrap(), "key123");
         assert_eq!(col1_secrets.get("DB_HOST").unwrap(), "localhost");
 
-        // Get secrets for collection 2
         let col2_secrets = cache.get_for_collection("col2").await;
         assert_eq!(col2_secrets.len(), 1);
         assert_eq!(col2_secrets.get("API_KEY").unwrap(), "key456");
 
-        // Get secrets for nonexistent collection
         let col3_secrets = cache.get_for_collection("col3").await;
         assert!(col3_secrets.is_empty());
     }
@@ -166,6 +174,7 @@ mod tests {
     async fn test_cache_empty_provider() {
         let provider = MockProvider {
             secrets: HashMap::new(),
+            prefix: "test",
         };
         let cache = SecretsCache::try_new(vec![Box::new(provider)], Duration::from_secs(300))
             .await

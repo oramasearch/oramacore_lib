@@ -1,5 +1,6 @@
 pub mod aws;
 mod cache;
+pub mod local;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,35 +12,31 @@ use tracing::info;
 
 use aws::AwsSecretsConfig;
 use cache::SecretsCache;
+use local::LocalSecretsConfig;
 
-/// Configuration for the secrets manager.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SecretsManagerConfig {
     pub aws: Option<AwsSecretsConfig>,
+    pub local: Option<LocalSecretsConfig>,
 }
 
-/// Trait for fetching secrets from an external provider.
-/// Each provider implementation fetches all secrets with the `oramacore_` prefix.
+/// Each provider fetches raw key-value pairs and defines how to parse
+/// its own key format into (collection_id, secret_key) pairs.
 #[async_trait]
 pub trait SecretsProvider: Send + Sync {
-    async fn fetch_all_oramacore_secrets(&self) -> Result<HashMap<String, String>>;
+    async fn fetch_raw_secrets(&self) -> Result<HashMap<String, String>>;
+    fn parse_key<'a>(&self, key: &'a str) -> Option<(&'a str, &'a str)>;
 }
 
-/// Service that manages secrets from multiple providers with caching.
-/// Lazily refreshes on access when the TTL expires.
 pub struct SecretsService {
     cache: SecretsCache,
 }
 
 impl SecretsService {
-    /// Creates a new SecretsService from configuration.
-    /// Initializes all configured providers and performs an initial fetch.
-    /// Secrets are lazily refreshed on access when the TTL expires.
     pub async fn try_new(config: SecretsManagerConfig) -> Result<Arc<Self>> {
         let mut providers: Vec<Box<dyn SecretsProvider>> = Vec::new();
         let mut ttl = std::time::Duration::from_secs(300);
 
-        // Initialize AWS provider if configured
         if let Some(aws_config) = &config.aws {
             ttl = aws_config.ttl;
             let aws_provider = aws::AwsSecretsProvider::try_new(aws_config)
@@ -48,9 +45,14 @@ impl SecretsService {
             providers.push(Box::new(aws_provider));
         }
 
+        if let Some(local_config) = &config.local {
+            let local_provider = local::LocalSecretsProvider::new(local_config);
+            providers.push(Box::new(local_provider));
+        }
+
         if providers.is_empty() {
             anyhow::bail!(
-                "No secrets providers configured. At least one provider (e.g., aws) must be specified."
+                "No secrets providers configured. At least one provider (e.g., aws, local) must be specified."
             );
         }
 
@@ -63,18 +65,10 @@ impl SecretsService {
         Ok(Arc::new(Self { cache }))
     }
 
-    /// Gets secrets for a specific collection.
-    /// Returns a filtered and prefix-stripped HashMap wrapped in Arc.
     pub async fn get_secrets_for_collection(
         &self,
         collection_id: &str,
     ) -> Arc<HashMap<String, String>> {
         self.cache.get_for_collection(collection_id).await
     }
-}
-
-/// Returns an empty secrets HashMap wrapped in Arc.
-/// Used when no secrets manager is configured.
-pub fn empty_secrets() -> Arc<HashMap<String, String>> {
-    Arc::new(HashMap::new())
 }

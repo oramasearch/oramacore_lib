@@ -62,6 +62,7 @@ async fn setup_localstack_secrets(
             secret_access_key: Some("test".to_string()),
             endpoint_url: Some(endpoint_url),
         }),
+        local: None,
     };
 
     (container, client, secrets_config)
