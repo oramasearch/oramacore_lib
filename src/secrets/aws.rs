@@ -17,8 +17,8 @@ pub struct AwsSecretsConfig {
         default = "default_ttl"
     )]
     pub ttl: std::time::Duration,
-    pub access_key_id: Secret<String>,
-    pub secret_access_key: Secret<String>,
+    pub access_key_id: Option<Secret<String>>,
+    pub secret_access_key: Option<Secret<String>>,
     pub endpoint_url: Option<String>,
 }
 
@@ -38,16 +38,24 @@ impl AwsSecretsProvider {
     pub async fn try_new(config: &AwsSecretsConfig) -> Result<Self> {
         let region = aws_sdk_secretsmanager::config::Region::new(config.region.clone());
 
-        let credentials = aws_sdk_secretsmanager::config::Credentials::new(
-            config.access_key_id.expose_secret(),
-            config.secret_access_key.expose_secret(),
-            None,
-            None,
-            PROVIDER_NAME,
-        );
-        let mut aws_config_loader = aws_config::from_env()
-            .region(region)
-            .credentials_provider(credentials);
+        let mut aws_config_loader = aws_config::from_env().region(region);
+
+        match (&config.access_key_id, &config.secret_access_key) {
+            (Some(access_key_id), Some(secret_access_key)) => {
+                let credentials = aws_sdk_secretsmanager::config::Credentials::new(
+                    access_key_id.expose_secret(),
+                    secret_access_key.expose_secret(),
+                    None,
+                    None,
+                    PROVIDER_NAME,
+                );
+                aws_config_loader = aws_config_loader.credentials_provider(credentials);
+                info!(region = %config.region, endpoint_url = ?config.endpoint_url, "AWS Secrets Manager provider initialized with explicit credentials");
+            }
+            _ => {
+                info!(region = %config.region, endpoint_url = ?config.endpoint_url, "AWS Secrets Manager provider initialized with default credential chain (instance profile/env)");
+            }
+        }
 
         if let Some(endpoint_url) = &config.endpoint_url {
             aws_config_loader = aws_config_loader.endpoint_url(endpoint_url);
@@ -55,8 +63,6 @@ impl AwsSecretsProvider {
 
         let aws_config = aws_config_loader.load().await;
         let client = Client::new(&aws_config);
-
-        info!(region = %config.region, endpoint_url = ?config.endpoint_url, "AWS Secrets Manager provider initialized");
 
         Ok(Self { client })
     }
@@ -141,8 +147,8 @@ mod tests {
         let config = AwsSecretsConfig {
             region: "us-east-1".to_string(),
             ttl: std::time::Duration::from_secs(300),
-            access_key_id: Secret::new("AKIA_TEST_ACCESS_KEY".to_string()),
-            secret_access_key: Secret::new("TEST_SECRET_ACCESS_KEY_VALUE".to_string()),
+            access_key_id: Some(Secret::new("AKIA_TEST_ACCESS_KEY".to_string())),
+            secret_access_key: Some(Secret::new("TEST_SECRET_ACCESS_KEY_VALUE".to_string())),
             endpoint_url: Some("http://localhost:4566".to_string()),
         };
 

@@ -62,8 +62,8 @@ async fn setup_localstack_secrets(
     let secrets_config = vec![SecretsProviderConfig::Aws(AwsSecretsConfig {
         region: "us-east-1".to_string(),
         ttl,
-        access_key_id: Secret::new("test".to_string()),
-        secret_access_key: Secret::new("test".to_string()),
+        access_key_id: Some(Secret::new("test".to_string())),
+        secret_access_key: Some(Secret::new("test".to_string())),
         endpoint_url: Some(endpoint_url),
     })];
 
