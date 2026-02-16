@@ -129,3 +129,30 @@ impl SecretsProvider for AwsSecretsProvider {
         Some((&rest[..idx], &rest[idx + 1..]))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use redact::Secret;
+
+    use super::AwsSecretsConfig;
+
+    #[test]
+    fn debug_does_not_print_aws_credentials() {
+        let config = AwsSecretsConfig {
+            region: "us-east-1".to_string(),
+            ttl: std::time::Duration::from_secs(300),
+            access_key_id: Secret::new("AKIA_TEST_ACCESS_KEY".to_string()),
+            secret_access_key: Secret::new("TEST_SECRET_ACCESS_KEY_VALUE".to_string()),
+            endpoint_url: Some("http://localhost:4566".to_string()),
+        };
+
+        let rendered = format!("{config:?}");
+
+        println!("{rendered}");
+        assert!(rendered.contains("AwsSecretsConfig"));
+        assert!(rendered.contains("us-east-1"));
+        assert!(rendered.contains("REDACTED"));
+        assert!(!rendered.contains("AKIA_TEST_ACCESS_KEY"));
+        assert!(!rendered.contains("TEST_SECRET_ACCESS_KEY_VALUE"));
+    }
+}
