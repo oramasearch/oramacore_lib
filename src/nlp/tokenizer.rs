@@ -9,9 +9,17 @@ pub struct Tokenizer {
     stop_words: HashSet<&'static str>,
 }
 
+/// List of tokens that should never be treated as stop words,
+/// even if they are present in the stop word list of a locale.
+static NEVER_TOKENS: &[&str] = &["ai", "AI"];
+
 impl Tokenizer {
     fn new(locale: Locale) -> Self {
-        let stop_words: HashSet<&'static str> = locale.stop_words().unwrap();
+        let mut stop_words: HashSet<&'static str> = locale.stop_words().unwrap();
+        for &token in NEVER_TOKENS {
+            stop_words.remove(token);
+        }
+
         Tokenizer {
             split_regex: locale.split_regex().unwrap(),
             stop_words,
@@ -215,5 +223,12 @@ mod tests {
         let tokenizer = super::Tokenizer::english();
         let tokens: Vec<String> = tokenizer.tokenize("Hello, - world!").collect();
         assert_eq!(tokens, vec!["hello", "-", "world"]);
+    }
+
+    #[test]
+    fn test_tokenizer_ai() {
+        let tokenizer = super::Tokenizer::english();
+        let tokens: Vec<String> = tokenizer.tokenize("AI & ChatGPT").collect();
+        assert_eq!(tokens, vec!["ai", "chatgpt"]);
     }
 }
