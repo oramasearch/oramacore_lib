@@ -226,8 +226,8 @@ mod tests {
     }
 
     #[test]
-    fn test_tokenizer_ai() {
-        let tokenizer = super::Tokenizer::english();
+    fn test_tokenizer_ai_italian() {
+        let tokenizer = super::Tokenizer::italian();
         let tokens: Vec<String> = tokenizer.tokenize("AI & ChatGPT").collect();
         assert_eq!(tokens, vec!["ai", "chatgpt"]);
     }
