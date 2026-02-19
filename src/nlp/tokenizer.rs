@@ -182,6 +182,9 @@ impl Tokenizer {
 }
 
 fn replace_char(c: char) -> char {
+    if c == '\u{2019}' {
+        return '\'';
+    }
     let code = u32::from(c);
     if !(DIACRITICS_CHARCODE_START..=DIACRITICS_CHARCODE_END).contains(&code) {
         return c;
@@ -222,7 +225,21 @@ mod tests {
     fn test_tokenizer_2() {
         let tokenizer = super::Tokenizer::english();
         let tokens: Vec<String> = tokenizer.tokenize("Hello, - world!").collect();
-        assert_eq!(tokens, vec!["hello", "-", "world"]);
+        assert_eq!(tokens, vec!["hello", "world"]);
+    }
+
+    #[test]
+    fn test_tokenizer_unicode_apostrophe() {
+        let tokenizer = super::Tokenizer::english();
+        let tokens: Vec<String> = tokenizer.tokenize("five o\u{2019}clock train").collect();
+        assert_eq!(tokens, vec!["five", "o'clock", "train"]);
+    }
+
+    #[test]
+    fn test_tokenizer_hyphenated_words() {
+        let tokenizer = super::Tokenizer::english();
+        let tokens: Vec<String> = tokenizer.tokenize("well-known fact").collect();
+        assert_eq!(tokens, vec!["well", "known", "fact"]);
     }
 
     #[test]

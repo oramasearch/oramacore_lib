@@ -206,7 +206,7 @@ impl Locale {
             Locale::DA => Some(Regex::new(r"(?im)[^a-z0-9æøåÆØÅ]+").unwrap()),
             Locale::DE => Some(Regex::new(r"(?im)[^a-z0-9A-ZäöüÄÖÜß]+").unwrap()),
             Locale::EL => Some(Regex::new(r"(?im)[^a-z0-9α-ωά-ώ]+").unwrap()),
-            Locale::EN => Some(Regex::new(r"(?im)[^A-Za-zàèéìòóù0-9_'-]+").unwrap()),
+            Locale::EN => Some(Regex::new(r"(?im)[^A-Za-zàèéìòóù0-9_'\u{2019}]+").unwrap()),
             Locale::ES => Some(Regex::new(r"(?im)[^a-z0-9A-Zá-úÁ-ÚñÑüÜ]+").unwrap()),
             Locale::ET => Some(Regex::new(r"(?im)[^a-z0-9A-Zõäöüšž]+").unwrap()),
             Locale::FI => Some(Regex::new(r"(?im)[^a-z0-9äöÄÖ]+").unwrap()),
