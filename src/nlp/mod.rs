@@ -230,4 +230,14 @@ mod tests {
             vec![("avvocata".to_string(), Some("avvoc".to_string()))]
         );
     }
+
+    #[test]
+    fn test_text_parser_builds_for_every_locale() {
+        let nlp = NLPService::new();
+        for locale in Locale::ALL {
+            let parser = nlp.get(locale);
+            assert_eq!(parser.locale(), locale);
+            parser.tokenize_and_stem("Hello world 東京 2024");
+        }
+    }
 }

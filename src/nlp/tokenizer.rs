@@ -7,6 +7,8 @@ use regex::Regex;
 pub struct Tokenizer {
     split_regex: Regex,
     stop_words: HashSet<&'static str>,
+    /// Segment CJK runs into bigrams (JP, KO, ZH). See [`Tokenizer::tokenize`].
+    cjk_bigrams: bool,
 }
 
 /// List of tokens that should never be treated as stop words,
@@ -15,14 +17,15 @@ static NEVER_TOKENS: &[&str] = &["ai", "AI"];
 
 impl Tokenizer {
     fn new(locale: Locale) -> Self {
-        let mut stop_words: HashSet<&'static str> = locale.stop_words().unwrap();
+        let mut stop_words: HashSet<&'static str> = locale.stop_words().unwrap_or_default();
         for &token in NEVER_TOKENS {
             stop_words.remove(token);
         }
 
         Tokenizer {
-            split_regex: locale.split_regex().unwrap(),
+            split_regex: locale.split_regex(),
             stop_words,
+            cjk_bigrams: matches!(locale, Locale::JP | Locale::KO | Locale::ZH),
         }
     }
 
@@ -158,6 +161,13 @@ impl Tokenizer {
         Self::new(Locale::ZH)
     }
 
+    /// Splits `input` into lowercase, stop-word-filtered tokens.
+    ///
+    /// For JP, KO and ZH, which do not separate words with spaces, each word is
+    /// further split where the script changes between CJK (Han, Hiragana,
+    /// Katakana, Hangul) and anything else. A CJK run becomes overlapping
+    /// character bigrams (`東京都` → `東京`, `京都`), or the single character when
+    /// the run has length 1; other runs (Latin words, digits) stay whole.
     pub fn tokenize<'a, 'b>(&'a self, input: &'b str) -> impl Iterator<Item = String> + 'b
     where
         'a: 'b,
@@ -165,6 +175,7 @@ impl Tokenizer {
         self.split_regex
             .split(input)
             .filter(|token| !token.is_empty())
+            .flat_map(|word| segment(word, self.cjk_bigrams))
             .filter_map(|token| self.normalize_token(token.to_lowercase()))
             .filter(|token| !token.is_empty() && !self.stop_words.contains(token.as_str()))
     }
@@ -179,6 +190,64 @@ impl Tokenizer {
     fn replace_diacritics(&self, str: &str) -> String {
         str.chars().map(replace_char).collect()
     }
+}
+
+/// Yields `word` whole, or, when `cjk_bigrams` is set, its non-CJK runs whole
+/// and its CJK runs as overlapping bigrams.
+fn segment(word: &str, cjk_bigrams: bool) -> impl Iterator<Item = &str> {
+    let bigram_char = move |c: char| cjk_bigrams && is_cjk(c);
+    let mut rest = word;
+    // Set once a bigram has covered the first character of `rest`.
+    let mut covered = false;
+
+    std::iter::from_fn(move || {
+        loop {
+            let mut chars = rest.chars();
+            let first = chars.next()?;
+            if !bigram_char(first) {
+                let end = rest.find(bigram_char).unwrap_or(rest.len());
+                let (run, tail) = rest.split_at(end);
+                rest = tail;
+                covered = false;
+                return Some(run);
+            }
+
+            let first_len = first.len_utf8();
+            match chars.next().filter(|&c| bigram_char(c)) {
+                Some(second) => {
+                    let bigram = &rest[..first_len + second.len_utf8()];
+                    rest = &rest[first_len..];
+                    covered = true;
+                    return Some(bigram);
+                }
+                None => {
+                    let single = &rest[..first_len];
+                    rest = &rest[first_len..];
+                    if !std::mem::take(&mut covered) {
+                        return Some(single);
+                    }
+                }
+            }
+        }
+    })
+}
+
+/// Han, Hiragana, Katakana and Hangul letters, including half-width forms.
+fn is_cjk(c: char) -> bool {
+    matches!(c,
+        '\u{1100}'..='\u{11FF}'     // Hangul Jamo
+        | '\u{3005}' | '\u{3007}'   // Ideographic iteration mark, number zero
+        | '\u{3040}'..='\u{30FF}'   // Hiragana, Katakana
+        | '\u{3130}'..='\u{318F}'   // Hangul Compatibility Jamo
+        | '\u{31F0}'..='\u{31FF}'   // Katakana Phonetic Extensions
+        | '\u{3400}'..='\u{4DBF}'   // CJK Unified Ideographs Extension A
+        | '\u{4E00}'..='\u{9FFF}'   // CJK Unified Ideographs
+        | '\u{A960}'..='\u{A97F}'   // Hangul Jamo Extended-A
+        | '\u{AC00}'..='\u{D7FF}'   // Hangul Syllables, Hangul Jamo Extended-B
+        | '\u{F900}'..='\u{FAFF}'   // CJK Compatibility Ideographs
+        | '\u{FF66}'..='\u{FFDC}'   // Half-width Katakana and Hangul
+        | '\u{20000}'..='\u{323AF}' // CJK Extensions B to H, Compatibility Supplement
+    )
 }
 
 fn replace_char(c: char) -> char {
@@ -214,6 +283,8 @@ const DIACRITICS_CHARCODE_END: u32 = 383;
 
 #[cfg(test)]
 mod tests {
+    use super::Locale;
+
     #[test]
     fn test_tokenizer() {
         let tokenizer = super::Tokenizer::english();
@@ -247,5 +318,58 @@ mod tests {
         let tokenizer = super::Tokenizer::italian();
         let tokens: Vec<String> = tokenizer.tokenize("AI & ChatGPT").collect();
         assert_eq!(tokens, vec!["ai", "chatgpt"]);
+    }
+
+    fn tokens(locale: Locale, input: &str) -> Vec<String> {
+        super::Tokenizer::new(locale).tokenize(input).collect()
+    }
+
+    #[test]
+    fn test_tokenizer_builds_for_every_locale() {
+        for locale in Locale::ALL {
+            let tokenizer = super::Tokenizer::new(locale);
+            let _: Vec<String> = tokenizer.tokenize("Hello 東京 2024").collect();
+        }
+    }
+
+    #[test]
+    fn test_tokenizer_japanese_bigrams() {
+        assert_eq!(
+            tokens(Locale::JP, "東京タワー"),
+            vec!["東京", "京タ", "タワ", "ワー"]
+        );
+    }
+
+    #[test]
+    fn test_tokenizer_korean_bigrams() {
+        assert_eq!(
+            tokens(Locale::KO, "한국어 검색"),
+            vec!["한국", "국어", "검색"]
+        );
+    }
+
+    #[test]
+    fn test_tokenizer_chinese_bigrams() {
+        assert_eq!(
+            tokens(Locale::ZH, "中文搜索引擎。"),
+            vec!["中文", "文搜", "搜索", "索引", "引擎"]
+        );
+    }
+
+    #[test]
+    fn test_tokenizer_cjk_mixed_text() {
+        assert_eq!(
+            tokens(Locale::JP, "東京 Tower 2024"),
+            vec!["東京", "tower", "2024"]
+        );
+        assert_eq!(
+            tokens(Locale::ZH, "北京Tower2024号"),
+            vec!["北京", "tower2024", "号"]
+        );
+    }
+
+    #[test]
+    fn test_tokenizer_cjk_single_character_run() {
+        assert_eq!(tokens(Locale::ZH, "猫 cat"), vec!["猫", "cat"]);
     }
 }

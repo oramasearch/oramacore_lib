@@ -42,6 +42,53 @@ pub enum Locale {
     ZH,
 }
 
+// Compile-time guard for `Locale::ALL`. The exhaustive match stops compiling
+// when a variant is added; add it to `ALL` too. The loop checks that `ALL`
+// follows declaration order with no gaps or duplicates.
+const _: () = {
+    match Locale::AR {
+        Locale::AR
+        | Locale::BG
+        | Locale::DA
+        | Locale::DE
+        | Locale::EL
+        | Locale::EN
+        | Locale::ES
+        | Locale::ET
+        | Locale::FI
+        | Locale::FR
+        | Locale::GA
+        | Locale::HI
+        | Locale::HU
+        | Locale::HY
+        | Locale::ID
+        | Locale::IT
+        | Locale::JP
+        | Locale::KO
+        | Locale::LT
+        | Locale::NE
+        | Locale::NL
+        | Locale::NO
+        | Locale::PT
+        | Locale::RO
+        | Locale::RU
+        | Locale::SA
+        | Locale::SL
+        | Locale::SR
+        | Locale::SV
+        | Locale::TA
+        | Locale::TR
+        | Locale::UK
+        | Locale::ZH => {}
+    }
+    assert!(Locale::ALL.len() == Locale::ZH as usize + 1);
+    let mut i = 0;
+    while i < Locale::ALL.len() {
+        assert!(Locale::ALL[i] as usize == i);
+        i += 1;
+    }
+};
+
 impl Display for Locale {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
@@ -161,6 +208,43 @@ impl FromStr for Locale {
 }
 
 impl Locale {
+    /// Every variant, in declaration order.
+    pub const ALL: [Locale; 33] = [
+        Locale::AR,
+        Locale::BG,
+        Locale::DA,
+        Locale::DE,
+        Locale::EL,
+        Locale::EN,
+        Locale::ES,
+        Locale::ET,
+        Locale::FI,
+        Locale::FR,
+        Locale::GA,
+        Locale::HI,
+        Locale::HU,
+        Locale::HY,
+        Locale::ID,
+        Locale::IT,
+        Locale::JP,
+        Locale::KO,
+        Locale::LT,
+        Locale::NE,
+        Locale::NL,
+        Locale::NO,
+        Locale::PT,
+        Locale::RO,
+        Locale::RU,
+        Locale::SA,
+        Locale::SL,
+        Locale::SR,
+        Locale::SV,
+        Locale::TA,
+        Locale::TR,
+        Locale::UK,
+        Locale::ZH,
+    ];
+
     pub fn to_iso_code_639_2(&self) -> &str {
         match self {
             Locale::AR => "ar",
@@ -199,41 +283,42 @@ impl Locale {
         }
     }
 
-    pub fn split_regex(&self) -> Option<Regex> {
+    /// Regex matching the separators between words. JP, KO and ZH split on
+    /// anything that is not a letter, mark or digit; the tokenizer then
+    /// segments CJK runs into bigrams.
+    pub fn split_regex(&self) -> Regex {
         match self {
-            Locale::AR => Some(Regex::new(r"(?im)[^a-z0-9أ-ي]+").unwrap()),
-            Locale::BG => Some(Regex::new(r"(?im)[^a-z0-9а-яА-Я]+").unwrap()),
-            Locale::DA => Some(Regex::new(r"(?im)[^a-z0-9æøåÆØÅ]+").unwrap()),
-            Locale::DE => Some(Regex::new(r"(?im)[^a-z0-9A-ZäöüÄÖÜß]+").unwrap()),
-            Locale::EL => Some(Regex::new(r"(?im)[^a-z0-9α-ωά-ώ]+").unwrap()),
-            Locale::EN => Some(Regex::new(r"(?im)[^A-Za-zàèéìòóù0-9_'\u{2019}]+").unwrap()),
-            Locale::ES => Some(Regex::new(r"(?im)[^a-z0-9A-Zá-úÁ-ÚñÑüÜ]+").unwrap()),
-            Locale::ET => Some(Regex::new(r"(?im)[^a-z0-9A-Zõäöüšž]+").unwrap()),
-            Locale::FI => Some(Regex::new(r"(?im)[^a-z0-9äöÄÖ]+").unwrap()),
-            Locale::FR => Some(Regex::new(r"(?im)[^a-z0-9äâàéèëêïîöôùüûœç-]+").unwrap()),
-            Locale::GA => Some(Regex::new(r"(?im)[^a-z0-9áéíóúÁÉÍÓÚ]+").unwrap()),
-            Locale::HI => Some(Regex::new(r"(?im)[^a-z0-9अ-आइ-ईउ-ऊऋ-एऐ-औअंअः]+").unwrap()),
-            Locale::HU => Some(Regex::new(r"(?im)[^a-z0-9áéíóöőúüűÁÉÍÓÖŐÚÜŰ]+").unwrap()),
-            Locale::HY => Some(Regex::new(r"(?im)[^a-z0-9ա-ֆ]+").unwrap()),
-            Locale::ID => Some(Regex::new(r"(?im)[^a-z0-9]+").unwrap()),
-            Locale::IT => Some(Regex::new(r"(?im)[^A-Za-zàèéìòóù0-9_'-]+").unwrap()),
-            Locale::JP => None,
-            Locale::KO => None,
-            Locale::LT => Some(Regex::new(r"(?im)[^a-z0-9ąčęėįšųūžĄČĘĖĮŠŲŪŽ]+").unwrap()),
-            Locale::NE => Some(Regex::new(r"(?im)[^a-z0-9अ-ह]+").unwrap()),
-            Locale::NL => Some(Regex::new(r"(?im)[^A-Za-zàèéìòóù0-9_'-]+").unwrap()),
-            Locale::NO => Some(Regex::new(r"(?im)[^a-z0-9_æøåÆØÅäÄöÖüÜ]+").unwrap()),
-            Locale::PT => Some(Regex::new(r"(?im)[^a-z0-9à-úÀ-Ú]+").unwrap()),
-            Locale::RO => Some(Regex::new(r"(?im)[^a-z0-9ăâîșțĂÂÎȘȚ]+").unwrap()),
-            Locale::RU => Some(Regex::new(r"(?im)[^a-z0-9а-яА-ЯёЁ]+").unwrap()),
-            Locale::SA => Some(Regex::new(r"(?im)[^a-z0-9A-Zāīūṛḷṃṁḥśṣṭḍṇṅñḻḹṝ]+").unwrap()),
-            Locale::SL => Some(Regex::new(r"(?im)[^a-z0-9čžšČŽŠ]+").unwrap()),
-            Locale::SR => Some(Regex::new(r"(?im)[^a-z0-9čćžšđČĆŽŠĐ]+").unwrap()),
-            Locale::SV => Some(Regex::new(r"(?im)[^a-z0-9_åÅäÄöÖüÜ-]+").unwrap()),
-            Locale::TA => Some(Regex::new(r"(?im)[^a-z0-9அ-ஹ]+").unwrap()),
-            Locale::TR => Some(Regex::new(r"(?im)[^a-z0-9çÇğĞıİöÖşŞüÜ]+").unwrap()),
-            Locale::UK => Some(Regex::new(r"(?im)[^a-z0-9а-яА-ЯіїєІЇЄ]+").unwrap()),
-            Locale::ZH => None,
+            Locale::AR => Regex::new(r"(?im)[^a-z0-9أ-ي]+").unwrap(),
+            Locale::BG => Regex::new(r"(?im)[^a-z0-9а-яА-Я]+").unwrap(),
+            Locale::DA => Regex::new(r"(?im)[^a-z0-9æøåÆØÅ]+").unwrap(),
+            Locale::DE => Regex::new(r"(?im)[^a-z0-9A-ZäöüÄÖÜß]+").unwrap(),
+            Locale::EL => Regex::new(r"(?im)[^a-z0-9α-ωά-ώ]+").unwrap(),
+            Locale::EN => Regex::new(r"(?im)[^A-Za-zàèéìòóù0-9_'\u{2019}]+").unwrap(),
+            Locale::ES => Regex::new(r"(?im)[^a-z0-9A-Zá-úÁ-ÚñÑüÜ]+").unwrap(),
+            Locale::ET => Regex::new(r"(?im)[^a-z0-9A-Zõäöüšž]+").unwrap(),
+            Locale::FI => Regex::new(r"(?im)[^a-z0-9äöÄÖ]+").unwrap(),
+            Locale::FR => Regex::new(r"(?im)[^a-z0-9äâàéèëêïîöôùüûœç-]+").unwrap(),
+            Locale::GA => Regex::new(r"(?im)[^a-z0-9áéíóúÁÉÍÓÚ]+").unwrap(),
+            Locale::HI => Regex::new(r"(?im)[^a-z0-9अ-आइ-ईउ-ऊऋ-एऐ-औअंअः]+").unwrap(),
+            Locale::HU => Regex::new(r"(?im)[^a-z0-9áéíóöőúüűÁÉÍÓÖŐÚÜŰ]+").unwrap(),
+            Locale::HY => Regex::new(r"(?im)[^a-z0-9ա-ֆ]+").unwrap(),
+            Locale::ID => Regex::new(r"(?im)[^a-z0-9]+").unwrap(),
+            Locale::IT => Regex::new(r"(?im)[^A-Za-zàèéìòóù0-9_'-]+").unwrap(),
+            Locale::JP | Locale::KO | Locale::ZH => Regex::new(r"[^\p{L}\p{M}\p{N}]+").unwrap(),
+            Locale::LT => Regex::new(r"(?im)[^a-z0-9ąčęėįšųūžĄČĘĖĮŠŲŪŽ]+").unwrap(),
+            Locale::NE => Regex::new(r"(?im)[^a-z0-9अ-ह]+").unwrap(),
+            Locale::NL => Regex::new(r"(?im)[^A-Za-zàèéìòóù0-9_'-]+").unwrap(),
+            Locale::NO => Regex::new(r"(?im)[^a-z0-9_æøåÆØÅäÄöÖüÜ]+").unwrap(),
+            Locale::PT => Regex::new(r"(?im)[^a-z0-9à-úÀ-Ú]+").unwrap(),
+            Locale::RO => Regex::new(r"(?im)[^a-z0-9ăâîșțĂÂÎȘȚ]+").unwrap(),
+            Locale::RU => Regex::new(r"(?im)[^a-z0-9а-яА-ЯёЁ]+").unwrap(),
+            Locale::SA => Regex::new(r"(?im)[^a-z0-9A-Zāīūṛḷṃṁḥśṣṭḍṇṅñḻḹṝ]+").unwrap(),
+            Locale::SL => Regex::new(r"(?im)[^a-z0-9čžšČŽŠ]+").unwrap(),
+            Locale::SR => Regex::new(r"(?im)[^a-z0-9čćžšđČĆŽŠĐ]+").unwrap(),
+            Locale::SV => Regex::new(r"(?im)[^a-z0-9_åÅäÄöÖüÜ-]+").unwrap(),
+            Locale::TA => Regex::new(r"(?im)[^a-z0-9அ-ஹ]+").unwrap(),
+            Locale::TR => Regex::new(r"(?im)[^a-z0-9çÇğĞıİöÖşŞüÜ]+").unwrap(),
+            Locale::UK => Regex::new(r"(?im)[^a-z0-9а-яА-ЯіїєІЇЄ]+").unwrap(),
         }
     }
 
