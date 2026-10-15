@@ -15,13 +15,18 @@ static NEVER_TOKENS: &[&str] = &["ai", "AI"];
 
 impl Tokenizer {
     fn new(locale: Locale) -> Self {
-        let mut stop_words: HashSet<&'static str> = locale.stop_words().unwrap();
+        let mut stop_words: HashSet<&'static str> = locale.stop_words().unwrap_or_default();
         for &token in NEVER_TOKENS {
             stop_words.remove(token);
         }
 
         Tokenizer {
-            split_regex: locale.split_regex().unwrap(),
+            // Locales without a language-specific splitter keep Unicode words intact.
+            // Both indexing and queries use this same punctuation/whitespace fallback.
+            split_regex: locale.split_regex().unwrap_or_else(|| {
+                tracing::warn!(%locale, "Using Unicode word tokenizer fallback");
+                Regex::new(r"[^\p{L}\p{N}_]+").expect("The Unicode word separator is a valid regex")
+            }),
             stop_words,
         }
     }
