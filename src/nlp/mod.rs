@@ -181,6 +181,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_locale_can_tokenize() {
+        use Locale::*;
+        for locale in [
+            AR, BG, DA, DE, EL, EN, ES, ET, FI, FR, GA, HI, HU, HY, ID, IT, JP, KO, LT, NE, NL, NO,
+            PT, RO, RU, SA, SL, SR, SV, TA, TR, UK, ZH,
+        ] {
+            let parser = TextParser::from_locale(locale);
+            assert!(!parser.tokenize("search 123").is_empty(), "{locale}");
+            assert!(
+                !parser.tokenize_and_stem("search 123").is_empty(),
+                "{locale}"
+            );
+        }
+    }
+
+    #[test]
+    fn cjk_fallback_preserves_unicode_words() {
+        for (locale, text, expected) in [
+            (
+                Locale::JP,
+                "東京、検索。Rust 123",
+                vec!["東京", "検索", "rust", "123"],
+            ),
+            (
+                Locale::KO,
+                "서울, 검색! Rust 123",
+                vec!["서울", "검색", "rust", "123"],
+            ),
+            (
+                Locale::ZH,
+                "北京，搜索。Rust 123",
+                vec!["北京", "搜索", "rust", "123"],
+            ),
+        ] {
+            let parser = TextParser::from_locale(locale);
+            assert_eq!(parser.tokenize(text), expected);
+            assert!(parser.tokenize(" 。、，!? ").is_empty());
+        }
+    }
+
+    #[test]
     fn test_tokenize() {
         let parser = TextParser::from_locale(Locale::EN);
 
